@@ -24,7 +24,31 @@ New-Item -ItemType Directory -Path $work | Out-Null
 
 Write-Host "Downloading the latest Last Showing from github.com/$Repo ..."
 $zip = Join-Path $work "latest.zip"
-Invoke-WebRequest -Uri "https://github.com/$Repo/archive/refs/heads/$Branch.zip" -OutFile $zip -UseBasicParsing
+# A private repo needs a read-only GitHub token, saved on its own line in a file called .github-token here
+# (it never leaves this computer except to GitHub, and is never added to the repo)
+$tokenFile = Join-Path $PSScriptRoot ".github-token"
+try {
+    if (Test-Path $tokenFile) {
+        $token = (Get-Content $tokenFile -Raw).Trim()
+        $headers = @{ Authorization = "Bearer $token"; Accept = "application/vnd.github+json"; "User-Agent" = "last-showing-update" }
+        Invoke-WebRequest -Uri "https://api.github.com/repos/$Repo/zipball/$Branch" -Headers $headers -OutFile $zip -UseBasicParsing
+    } else {
+        Invoke-WebRequest -Uri "https://github.com/$Repo/archive/refs/heads/$Branch.zip" -OutFile $zip -UseBasicParsing
+    }
+} catch {
+    $code = $_.Exception.Response.StatusCode.value__
+    if ($code -eq 401) {
+        Write-Host "GitHub refused the token in .github-token: it may have expired or been mistyped. Make a new one (see README)." -ForegroundColor Red
+    } elseif ($code -eq 404 -and -not (Test-Path $tokenFile)) {
+        Write-Host "GitHub says Not Found. If the repo is private, save a read-only token in .github-token (see README)." -ForegroundColor Red
+    } elseif ($code -eq 404) {
+        Write-Host "GitHub says Not Found even with your token. Check it has access to $Repo with Contents: Read-only." -ForegroundColor Red
+    } else {
+        Write-Host "Download failed: $($_.Exception.Message)" -ForegroundColor Red
+    }
+    Remove-Item $work -Recurse -Force
+    exit 1
+}
 Expand-Archive -Path $zip -DestinationPath $work
 $src = Get-ChildItem $work -Directory | Select-Object -First 1
 

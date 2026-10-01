@@ -87,6 +87,16 @@ From your Last Showing folder, in PowerShell:
 
 It downloads the latest version from GitHub, replaces the program files and rebuilds the container. Your `.env`, your `data` folder and your `docker-compose.yml` are never touched. If Windows says the file "is not digitally signed", run `Unblock-File .\update.ps1` once (it was downloaded from the internet); if scripts are disabled entirely, also run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`. The version you're running is shown at the bottom of every page.
 
+**If the repo is private**, the script needs a read-only GitHub token:
+
+1. On GitHub, open **Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token**.
+2. Give it a name like "Last Showing updates" and an expiry (a year is fine; you'll make a new one when it runs out).
+3. Under **Repository access**, choose **Only select repositories** and pick `last-showing`.
+4. Under **Permissions → Repository permissions**, set **Contents** to **Read-only**. Leave everything else as no access.
+5. Generate it, copy it, and save it as the only line of a file called `.github-token` in your Last Showing folder (`notepad .github-token`).
+
+The token stays on your computer and is only sent to GitHub; it's excluded from the repo like `.env`.
+
 Coming from Vuearr? Your data carries over automatically. Because the container name changed, run `docker compose down` once before your first update.
 
 ## Running it for someone else
