@@ -8,7 +8,7 @@ import traceback
 from pathlib import Path
 from datetime import datetime, timedelta
 
-from . import letterboxd, reviews, tickets, vue
+from . import alerts, letterboxd, reviews, tickets, vue
 from .config import Settings
 from .db import DB
 from .planner import make_plan
@@ -25,6 +25,7 @@ class Engine:
         self.lock = asyncio.Lock()
         self.running_step: str | None = None
         self.settings_version = 0
+        self.notify = None  # set to the Discord bot's send_alerts when it's running
         self.settings_changed = asyncio.Event()
 
     def settings_saved(self) -> None:
@@ -168,6 +169,8 @@ class Engine:
                         return tid
                     res = await asyncio.gather(*(one(r) for r in todo), return_exceptions=True)
                     db.set("match_attempts", retry_log)
+                    if any(isinstance(x, PermissionError) for x in res):
+                        raise next(x for x in res if isinstance(x, PermissionError))
                     ok = sum(1 for x in res if isinstance(x, int))
                     return f"matched {ok}/{len(todo)} new listings"
                 await step("Match Vue films to TMDB", do_match)
@@ -284,6 +287,12 @@ class Engine:
         report["finished"] = datetime.now(s.tz).isoformat(timespec="seconds")
         report["ok"] = not report["errors"]
         db.set("last_refresh", report)
+        try:
+            messages = alerts.assess(db, report)
+            if messages and self.notify:
+                await self.notify(messages)
+        except Exception as e:  # an alert problem must never break the refresh
+            log.warning("couldn't send break alerts: %s", e)
         return report
 
     async def set_override(self, film_id: str, tmdb_id: int | None) -> None:

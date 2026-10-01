@@ -108,6 +108,10 @@ Coming from Vuearr? Your data carries over automatically. Because the container 
 
 Nothing is hard-coded to one person or cinema. A friend runs their own copy with their own `.env` secrets, then picks their Vue, tickets and Letterboxd username on the Settings page.
 
+## Break alerts
+
+Last Showing DMs you only when something stops working: straight away if a key (TMDB, OMDb, the Guardian) is rejected, and when any step of the daily refresh has failed twice in a row. When it's working again you get a short "fixed" message. Open problems also show as a red notice at the top of every dashboard page, in case Discord is the thing that's broken.
+
 ## Troubleshooting
 
 - **"Vue listings" fails in the refresh log.** Vue may have changed its site. The listings are read the same way the website reads them, from `/api/microservice/showings/cinemas/<id>/films`. If the cinema ID lookup fails, set `VUE_CINEMA_ID` (Cribbs Causeway is `10018`).

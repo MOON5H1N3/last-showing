@@ -112,7 +112,7 @@ def create_app(engine: Engine, bot=None) -> Starlette:
         today = datetime.now(s.tz).date()
         ctx = dict(
             plan=p, s=s, today=today, page=page, busy=engine.busy, step=engine.running_step,
-            msg=request.query_params.get("msg", ""), problems=s.problems(),
+            msg=request.query_params.get("msg", ""), problems=s.problems(), open_alerts=db.get("alerts_open") or {},
             cinema_name=s.vue_cinema_name or s.vue_cinema_slug.replace("-", " ").title(),
             path=request.url.path + (f"?{request.url.query}" if request.url.query else ""),
             days_until=lambda v: (date.fromisoformat(v[:10]) - today).days if v else None,

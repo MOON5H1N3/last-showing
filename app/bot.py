@@ -183,6 +183,16 @@ class VueBot(discord.Client):
         return status
 
     # ---------- sending ----------
+    async def send_alerts(self, messages: list[str]) -> bool:
+        """Break alerts: only when something stops working, or starts working again."""
+        try:
+            user = await self.fetch_user(self.owner)
+            await user.send("**Last Showing**\n" + "\n\n".join(messages))
+            return True
+        except Exception as e:
+            log.warning("couldn't DM the alert: %s", e)
+            return False
+
     async def send_monthly_plan(self, plan: dict) -> bool:
         if not plan:
             return False

@@ -82,6 +82,7 @@ async def main() -> None:
     if s.discord_token and s.discord_user_id:
         from .bot import VueBot
         bot = VueBot(engine)
+        engine.notify = bot.send_alerts
 
     server = uvicorn.Server(uvicorn.Config(create_app(engine, bot), host="0.0.0.0", port=s.port,
                                            log_level="warning", lifespan="off"))

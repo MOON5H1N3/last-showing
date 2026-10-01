@@ -199,6 +199,7 @@ footer.foot .wrap{padding-top:24px;padding-bottom:48px;display:flex;gap:24px;fle
 <main class="wrap">
   {% if msg %}<p class="notice" role="status">{{ msg }}</p>{% endif %}
   {% if busy %}<p class="notice" role="status">Refreshing{% if step %}: {{ step }}{% endif %}. Reload in a minute to see the result.</p>{% endif %}
+  {% if open_alerts %}<div class="notice bad"><strong>Something's not working</strong><ul>{% for name, a in open_alerts.items() %}<li>{{ name }}, since {{ a.since|dt('%a %d %b, %H:%M') }}: {{ a.error }}</li>{% endfor %}</ul></div>{% endif %}
   {% if problems %}<div class="notice bad"><strong>Setup needed</strong><ul>{% for p in problems %}<li>{{ p }}</li>{% endfor %}</ul></div>{% endif %}
   {% block content %}{% endblock %}
 </main>

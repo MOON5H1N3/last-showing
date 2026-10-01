@@ -66,6 +66,8 @@ class TMDB:
                     continue
                 if r.status_code == 404:
                     return {}
+                if r.status_code == 401:
+                    raise PermissionError("TMDB refused the key in TMDB_API_KEY")
                 r.raise_for_status()
                 return r.json()
         return {}
@@ -194,6 +196,8 @@ class TMDB:
         results = await asyncio.gather(*(self.details(i, max_age_days) for i in ids), return_exceptions=True)
         out = {}
         for i, r in zip(ids, results):
+            if isinstance(r, PermissionError):
+                raise r  # a rejected key isn't a one-film problem
             if isinstance(r, Exception):
                 log.warning("TMDB details failed for %s: %s", i, r)
             elif r:
