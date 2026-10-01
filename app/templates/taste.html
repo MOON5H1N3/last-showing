@@ -71,6 +71,19 @@
 
 <section class="section">
   <div class="rule"></div>
+  <h2 class="sec">How close were the guesses?</h2>
+  {% if acc.count %}
+  <p class="lead">On the {{ acc.count }} film{{ 's' if acc.count != 1 }} you've rated since Last Showing predicted {{ 'it' if acc.count == 1 else 'them' }}, it was off by {{ '%.2f'|format(acc.error) }}★ on average{% if acc.crowd_error is defined %}; the Letterboxd average alone was off by {{ '%.2f'|format(acc.crowd_error) }}★{% endif %}. {% if acc.bias > 0.15 %}You've liked them more than predicted.{% elif acc.bias < -0.15 %}You've liked them less than predicted.{% endif %}</p>
+  <table class="tablemini" style="max-width:720px"><thead><tr><th>Film</th><th>Predicted</th><th>You gave it</th><th>Gap</th><th></th></tr></thead><tbody>
+    {% for f in acc.films %}<tr><td>{% if f.film_id %}<a href="/film/{{ f.film_id }}" style="color:inherit">{{ f.title }}</a>{% else %}{{ f.title }}{% endif %}</td><td>{{ '%.1f'|format(f.predicted) }}★</td><td>{{ f.rating }}★</td><td>{{ '%+.1f'|format(f.gap) }}</td><td class="faint">{{ 'Ticket' if f.ticket }}</td></tr>{% endfor %}
+  </tbody></table>
+  {% else %}
+  <p class="lead">Nothing to compare yet. Since {{ (acc.since or today.isoformat())|dt('%d %B') }}, Last Showing has noted what it predicted for {{ acc.tracking }} films before you've seen them. When you rate one on Letterboxd, it shows up here next to the prediction, so you can see how good the guesses really are.</p>
+  {% endif %}
+</section>
+
+<section class="section">
+  <div class="rule"></div>
   <h2 class="sec">Does buzz change your ratings?</h2>
   {% if bc.ok %}
   <p class="lead">

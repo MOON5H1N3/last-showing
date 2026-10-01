@@ -185,6 +185,7 @@ class Item:
     wanted: bool = False                          # you marked it "Want to see"
     paid_trip: bool = False                       # wanted, but no free ticket fits before it's likely to leave
     reviews: dict = field(default_factory=dict)   # critics and audience verdicts, for you to judge (not scored)
+    model_rating: float | None = None             # the model's own prediction, before your rating or watchlist boost
     p_two_weeks: float | None = None              # chance it's still on two weeks after its first showing here
 
 
@@ -430,6 +431,7 @@ def make_plan(db: DB, s: Settings, now: datetime | None = None, model: TasteMode
         recent = release is None or release >= today - timedelta(days=45)  # early reviews: new and upcoming films
         if v["label"] and f["kind"] == "film" and recent:
             item.reviews = {**v, "guardian_url": rv["guardian_url"] if rv else None}
+        item.model_rating = round(pred.rating, 2) if meta else None
         item.wanted = f["film_id"] in wants
         item.extra = (f["kind"] != "film" and not on_wl and not item.wanted
                       and not (yours is None and rating >= model.mu + 0.75))
@@ -667,4 +669,40 @@ def buzz_check(db: DB) -> dict:
     out["logged"] = db.one("SELECT COUNT(DISTINCT tmdb_id) n FROM buzz_log")["n"]
     out["logged_then_rated"] = db.one("""SELECT COUNT(DISTINCT b.tmdb_id) n FROM buzz_log b JOIN ratings r ON r.tmdb_id=b.tmdb_id
                                          WHERE b.day < COALESCE(NULLIF(r.rated_on,''), '9999')""")["n"]
+    return out
+
+
+def record_predictions(db: DB, plan: dict, today: date) -> int:
+    """Keep the first prediction for every film you haven't rated yet, to check against your rating later."""
+    rows = [(f["tmdb_id"], f["film_id"], f["title"], f.get("model_rating"), f.get("fav_chance"), f.get("confidence"),
+             f.get("community"), today.isoformat())
+            for f in (plan.get("films") or {}).values()
+            if f.get("tmdb_id") and f.get("your_rating") is None and f.get("model_rating") is not None]
+    with db.tx():
+        for r in rows:
+            db.x("""INSERT OR IGNORE INTO predictions(tmdb_id,film_id,title,predicted,fav_chance,confidence,community,recorded_on)
+                    VALUES(?,?,?,?,?,?,?,?)""", r)
+    return len(rows)
+
+
+def accuracy_check(db: DB) -> dict:
+    """Films you rated after Last Showing predicted them: predicted against actual, and against the crowd."""
+    rows = db.q("""SELECT p.*, r.rating, r.rated_on,
+                          EXISTS(SELECT 1 FROM ticket_uses t WHERE t.tmdb_id=p.tmdb_id AND t.active=1) AS ticket
+                   FROM predictions p JOIN ratings r ON r.tmdb_id=p.tmdb_id
+                   WHERE COALESCE(NULLIF(r.rated_on,''),'9999') >= p.recorded_on
+                   ORDER BY r.rated_on DESC""")
+    films = [{"title": r["title"], "film_id": r["film_id"], "predicted": r["predicted"], "rating": r["rating"],
+              "gap": round(r["rating"] - r["predicted"], 2), "community": r["community"], "ticket": bool(r["ticket"]),
+              "rated_on": r["rated_on"]} for r in rows]
+    out = {"films": films[:20], "count": len(films),
+           "tracking": db.one("SELECT COUNT(*) n FROM predictions")["n"],
+           "since": (db.one("SELECT MIN(recorded_on) d FROM predictions") or {"d": None})["d"]}
+    if films:
+        out["error"] = round(sum(abs(f["gap"]) for f in films) / len(films), 2)
+        out["bias"] = round(sum(f["gap"] for f in films) / len(films), 2)  # + = you liked them more than predicted
+        crowd = [f for f in films if f["community"] is not None]
+        if crowd:
+            out["crowd_error"] = round(sum(abs(f["rating"] - f["community"]) for f in crowd) / len(crowd), 2)
+            out["crowd_films"] = len(crowd)
     return out

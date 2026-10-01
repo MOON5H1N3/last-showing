@@ -36,6 +36,12 @@ CREATE TABLE IF NOT EXISTS snapshots (
 
 CREATE TABLE IF NOT EXISTS movies (tmdb_id INTEGER PRIMARY KEY, data TEXT, fetched_at TEXT);
 CREATE TABLE IF NOT EXISTS community (tmdb_id INTEGER PRIMARY KEY, lb_avg REAL, fetched_at TEXT);
+-- What Last Showing predicted for each film before you saw it (the first prediction is kept), so it can be
+-- checked against your rating later
+CREATE TABLE IF NOT EXISTS predictions (
+    tmdb_id INTEGER PRIMARY KEY, film_id TEXT, title TEXT, predicted REAL, fav_chance REAL, confidence TEXT,
+    community REAL, recorded_on TEXT
+);
 -- Early reviews (critics) for films at your cinema
 CREATE TABLE IF NOT EXISTS reviews (
     tmdb_id INTEGER PRIMARY KEY, imdb_id TEXT, rt INTEGER, metascore INTEGER, imdb_rating REAL,

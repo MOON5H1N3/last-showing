@@ -62,8 +62,13 @@ class Engine:
         return p
 
     def replan(self) -> dict:
+        from .planner import record_predictions
         p = make_plan(self.db, self.s)
         self.db.set("plan", p)
+        try:
+            record_predictions(self.db, p, datetime.now(self.s.tz).date())
+        except Exception as e:  # never let bookkeeping stop the plan
+            log.warning("couldn't save predictions: %s", e)
         return p
 
     async def refresh(self, vue_listings: bool = True) -> dict:

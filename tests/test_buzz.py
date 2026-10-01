@@ -260,3 +260,33 @@ class TestWantToSee(unittest.TestCase):
         self.assertFalse(p["films"]["HO5"]["extra"])
         free, paid = self.placed(p)
         self.assertTrue("HO5" in free or "HO5" in paid)
+
+
+class TestAccuracyCheck(unittest.TestCase):
+    def test_first_prediction_kept_and_compared(self):
+        from datetime import date
+        from app.planner import accuracy_check, record_predictions
+        db = seeded_db()
+        p = make_plan(db, settings(), NOW)
+        n = record_predictions(db, p, date(2026, 10, 1))
+        self.assertGreater(n, 0)
+        film = p["films"]["HO8"]  # Clayface: not rated yet
+        first = db.one("SELECT predicted FROM predictions WHERE tmdb_id=?", (film["tmdb_id"],))["predicted"]
+        db.x("UPDATE predictions SET predicted=? WHERE tmdb_id=?", (first, film["tmdb_id"]))
+        record_predictions(db, {"films": {"HO8": {**film, "model_rating": 1.0}}}, date(2026, 10, 5))
+        self.assertEqual(db.one("SELECT predicted FROM predictions WHERE tmdb_id=?", (film["tmdb_id"],))["predicted"], first)
+        self.assertEqual(accuracy_check(db)["count"], 0)
+        db.x("INSERT INTO ratings(tmdb_id,rating,rated_on,source) VALUES(?,?,?,?)", (film["tmdb_id"], 4.5, "2026-10-24", "rss"))
+        db.x("INSERT INTO ticket_uses(month,film_id,tmdb_id,title,used_on,source,active,created_at) VALUES(?,?,?,?,?,?,1,?)",
+             ("2026-10", "HO8", film["tmdb_id"], "Clayface", "2026-10-24", "manual", "x"))
+        acc = accuracy_check(db)
+        self.assertEqual(acc["count"], 1)
+        self.assertEqual(acc["films"][0]["gap"], round(4.5 - first, 2))
+        self.assertTrue(acc["films"][0]["ticket"])
+
+    def test_old_ratings_dont_count(self):
+        from datetime import date
+        from app.planner import accuracy_check, record_predictions
+        db = seeded_db()
+        record_predictions(db, make_plan(db, settings(), NOW), date(2026, 10, 1))
+        self.assertEqual(accuracy_check(db)["count"], 0)  # the training ratings are all from before

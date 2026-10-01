@@ -161,10 +161,10 @@ def create_app(engine: Engine, bot=None) -> Starlette:
                       current_month=p.get("month"))
 
     async def taste_page(request: Request):
-        from .planner import buzz_check
+        from .planner import accuracy_check, buzz_check
         return render("taste.html", request, "taste", run_check=db.get("run_check") or {},
                       hist=db.get("history_import") or {}, lb_import=db.get("letterboxd_import") or {},
-                      bc=buzz_check(db))
+                      bc=buzz_check(db), acc=accuracy_check(db))
 
     async def settings_page(request: Request):
         cinemas = db.get("vue_cinemas") or []
