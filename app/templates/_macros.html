@@ -58,7 +58,6 @@
 {%- elif i.wanted %}{% set _ = t.append(('', 'Want to see')) %}
 {%- elif i.pinned %}{% set _ = t.append(('', 'Pinned')) %}{% endif %}
 {%- if i.leaving %}{% set _ = t.append(('leaving', 'Leaving soon')) %}{% elif i.short_run %}{% set _ = t.append(('leaving', 'Short run')) %}{% endif %}
-{%- if ctx == 'later' %}{% set _ = t.append(('later', 'Catching later')) %}{% endif %}
 {%- if i.kind == 'rerelease' %}{% set _ = t.append(('plain', 'Re-release')) %}{% elif i.kind == 'event' %}{% set _ = t.append(('plain', 'Event')) %}{% endif %}
 {%- if i.on_watchlist and not i.wanted %}{% set _ = t.append(('plain', 'Watchlist')) %}{% endif %}
 {%- if t %}<span class="tags">{% for cls, word in t[:2] %}<span class="tag {{ cls }}"{% if word == 'Short run' %} title="{{ '%.0f'|format((i.p_two_weeks or 0) * 100) }}% chance it's still on two weeks after it opens here"{% endif %}>{{ word }}</span>{% endfor %}</span>{% endif %}{% endmacro %}

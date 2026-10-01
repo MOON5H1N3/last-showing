@@ -24,7 +24,7 @@
       {% if not n_tickets %}No tickets set up, so this is simply what's worth seeing and what's leaving.
       {% elif not is_current %}A forecast. Vue lists showtimes about a week ahead, so these picks firm up as {{ name }} gets closer.
       {% elif left == 0 %}All your tickets are used this month. Anything below is worth paying for.
-      {% elif left == 1 %}One ticket left, {{ 'which rolls over if unused' if s.ticket_rollover else 'which expires ' ~ (mp.month_end|dt('%a %d %b')) }}.
+      {% elif left == 1 %}One ticket left, {{ 'which rolls over if unused' if s.ticket_rollover else 'which expires ' ~ (mp.month_end|dt('%a %-d %b')) }}.
       {% else %}{{ left }} tickets to use by {{ mp.month_end|dt('%A %d %B') }}.{% endif %}
       {% if is_current and plan.get('tickets_carried') %}Includes {{ plan.tickets_carried }} rolled over from last month.{% endif %}
     </p>
@@ -44,7 +44,7 @@
       {% elif is_current %}
       <div class="stub">
         <div class="body"><span class="admit">ADMIT ONE</span><span class="no">TICKET {{ i + 1 }}</span>
-          <span class="what">Unused, {{ 'rolls over' if s.ticket_rollover else 'expires ' ~ (mp.month_end|dt('%a %d %b')) }}</span></div>
+          <span class="what">Unused, {{ 'rolls over' if s.ticket_rollover else 'expires ' ~ (mp.month_end|dt('%a %-d %b')) }}</span></div>
         <div class="tear"><span>No. {{ '%02d'|format(i + 1) }}</span></div>
       </div>
       {% else %}
