@@ -1,7 +1,8 @@
 # Last Showing updater for Windows.
 #
 # Run from this folder in PowerShell:   .\update.ps1
-# (If Windows blocks it, run once:  Set-ExecutionPolicy -Scope CurrentUser RemoteSigned)
+# If Windows says it can't be loaded, run once:  Unblock-File .\update.ps1
+# (and if scripts are disabled entirely:  Set-ExecutionPolicy -Scope CurrentUser RemoteSigned)
 #
 # It downloads the latest version from GitHub, replaces the program files, and rebuilds the container.
 # Your .env, your data folder (database, backups, Letterboxd export) and your docker-compose.yml are never touched.
@@ -53,6 +54,8 @@ if (-not (Test-Path "docker-compose.yml")) {
     Write-Host "Note: the template docker-compose.yml changed. Compare docker-compose.example.yml with yours." -ForegroundColor Yellow
 }
 Remove-Item $work -Recurse -Force
+# files from the internet are marked as such; clear that so the next .\update.ps1 runs without a prompt
+Get-ChildItem -Path $PSScriptRoot -Filter *.ps1 | Unblock-File
 
 Write-Host "Updated $before -> $after. Rebuilding ..."
 docker compose up -d --build

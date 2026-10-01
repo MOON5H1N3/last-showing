@@ -83,7 +83,7 @@ From your Last Showing folder, in PowerShell:
 .\update.ps1
 ```
 
-It downloads the latest version from GitHub, replaces the program files and rebuilds the container. Your `.env`, your `data` folder and your `docker-compose.yml` are never touched. If Windows refuses to run it, run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once. The version you're running is shown at the bottom of every page.
+It downloads the latest version from GitHub, replaces the program files and rebuilds the container. Your `.env`, your `data` folder and your `docker-compose.yml` are never touched. If Windows says the file "is not digitally signed", run `Unblock-File .\update.ps1` once (it was downloaded from the internet); if scripts are disabled entirely, also run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`. The version you're running is shown at the bottom of every page.
 
 Coming from Vuearr? Your data carries over automatically. Because the container name changed, run `docker compose down` once before your first update.
 
