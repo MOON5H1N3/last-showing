@@ -49,9 +49,14 @@ def plan_embeds(plan: dict, dashboard_url: str) -> list[discord.Embed]:
     else:
         head.description = "All your tickets are used this month. Anything below is worth paying for."
     m0 = (plan.get("months") or [{}])[0]
+    wants = plan.get("wants") or {}
+    if wants.get("paid"):
+        head.add_field(name=f"Want to see: {len(wants['paid'])} paid trip{'s' if len(wants['paid']) != 1 else ''} needed",
+                       inline=False, value="\n".join(f"• **{x['title']}** in {x['month_name']}" for x in wants["paid"][:5])
+                       + f"\nYour free tickets cover {wants['free']} of the {wants['total']} films you want to see.")
     worth = m0.get("worth_paying") or []
     if worth:
-        head.add_field(name="Your paid trips" if m0.get("paid_planned") else "Worth paying for", inline=False,
+        head.add_field(name="Worth paying for", inline=False,
                        value="\n".join(f"• **{i['title']}** {i['predicted']:.1f}★"
                                        + (f". {i['big_screen_note']}" if i.get("big_screen_note") else "")
                                        for i in worth[:4]))
@@ -108,6 +113,9 @@ class PlanView(discord.ui.View):
             if not p.get("pinned"):
                 self.add_item(discord.ui.Button(label="I'm seeing this", style=discord.ButtonStyle.secondary,
                                                 custom_id=f"ls:pin:{p['film_id']}"[:100], row=row))
+            if not p.get("wanted"):
+                self.add_item(discord.ui.Button(label="Want to see", style=discord.ButtonStyle.secondary,
+                                                custom_id=f"ls:want:{p['film_id']}"[:100], row=row))
             self.add_item(discord.ui.Button(label="Not for me", style=discord.ButtonStyle.secondary,
                                             custom_id=f"ls:nope:{p['film_id']}"[:100], row=row))
         if dashboard_url.startswith(("http://", "https://")):
@@ -210,6 +218,8 @@ class VueBot(discord.Client):
             msg = self._use(film_id=film_id)
         elif action == "pin":
             msg = self._pin(film_id)
+        elif action == "want":
+            msg = self._want(film_id)
         elif action == "nope":
             msg = self._dismiss(film_id)
         else:
@@ -227,6 +237,16 @@ class VueBot(discord.Client):
                          (film_id, month, datetime.now().isoformat(timespec="seconds")))
         self.engine.replan()
         return f"📌 Pinned **{title}**: one of this month's tickets is kept for it."
+
+    def _want(self, film_id: str) -> str:
+        title, tid = self._film(film_id)
+        self.engine.db.x("INSERT OR REPLACE INTO wants(film_id,tmdb_id,title,created_at) VALUES(?,?,?,?)",
+                         (film_id, tid, title, datetime.now().isoformat(timespec="seconds")))
+        w = (self.engine.replan() or {}).get("wants") or {}
+        paid = len(w.get("paid") or [])
+        tail = (f" You'd now need {paid} paid trip{'s' if paid != 1 else ''} to see everything you want."
+                if paid else " Your free tickets still cover everything you want to see.")
+        return f"★ **{title}** is on your Want to see list.{tail}"
 
     def _dismiss(self, film_id: str) -> str:
         title, tid = self._film(film_id)

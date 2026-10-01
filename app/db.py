@@ -54,6 +54,8 @@ CREATE TABLE IF NOT EXISTS watched (tmdb_id INTEGER PRIMARY KEY);
 
 -- "I'm seeing this": a film you've committed a ticket to in a given month
 CREATE TABLE IF NOT EXISTS pins (film_id TEXT PRIMARY KEY, month TEXT, created_at TEXT);
+-- "Want to see": films you're set on seeing; they get your free tickets first, then paid trips if needed
+CREATE TABLE IF NOT EXISTS wants (film_id TEXT PRIMARY KEY, tmdb_id INTEGER, title TEXT, created_at TEXT);
 -- "Not for me": films you never want suggested
 CREATE TABLE IF NOT EXISTS dismissed (film_id TEXT PRIMARY KEY, tmdb_id INTEGER, title TEXT, created_at TEXT);
 

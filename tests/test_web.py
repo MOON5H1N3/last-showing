@@ -80,3 +80,23 @@ class TestPages(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestWantAndPin(unittest.TestCase):
+    def test_want_unwant_and_summary(self):
+        c, s, db = client()
+        r = c.post("/want", data={"film_id": "HO8", "next": "/"}, follow_redirects=False)
+        self.assertIn(r.status_code, (302, 303))
+        self.assertIsNotNone(db.one("SELECT 1 FROM wants WHERE film_id='HO8'"))
+        home = c.get("/").text
+        self.assertIn("You want to see 1 film", home)
+        c.post("/unwant", data={"film_id": "HO8", "next": "/"})
+        self.assertIsNone(db.one("SELECT 1 FROM wants WHERE film_id='HO8'"))
+
+    def test_film_page_offers_the_right_months(self):
+        c, s, db = client()
+        page = c.get("/film/HO9").text  # Ebenezer opens in November
+        self.assertNotIn('value="2026-10"', page)
+        self.assertIn("2026-11", page)
+        c.post("/pin", data={"film_id": "HO9", "month": "2026-11", "next": "/film/HO9"})
+        self.assertEqual(db.one("SELECT month FROM pins WHERE film_id='HO9'")["month"], "2026-11")

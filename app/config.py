@@ -42,8 +42,6 @@ class Settings:
     favourite_weight: float = field(default_factory=lambda: float(_env("FAVOURITE_WEIGHT", "1.0")))
     # how much more a film that suits the big screen is worth a cinema trip (0 = rank on enjoyment alone)
     big_screen_weight: float = field(default_factory=lambda: float(_env("BIG_SCREEN_WEIGHT", "0.5")))
-    # trips a month you'd pay for on top of your tickets
-    paid_trips: int = field(default_factory=lambda: int(_env("PAID_TRIPS", "0")))
     watchlist_boost: float = field(default_factory=lambda: float(_env("WATCHLIST_BOOST", "0.25")))
     include_events: bool = field(default_factory=lambda: _bool("INCLUDE_EVENTS", True))
     include_rereleases: bool = field(default_factory=lambda: _bool("INCLUDE_RERELEASES", True))
@@ -111,7 +109,7 @@ class Settings:
         "ticket_rollover": "bool", "ticket_excluded_formats": "list",
         "vue_cinema_slug": "slug", "vue_cinema_id": "text", "vue_cinema_name": "text",
         "urgency_weight": "float:0:1", "favourite_weight": "float:0:2", "watchlist_boost": "float:0:1",
-        "big_screen_weight": "float:0:1", "paid_trips": "int:0:8",
+        "big_screen_weight": "float:0:1",
         "include_events": "bool", "include_rereleases": "bool", "include_seen": "bool",
         "letterboxd_user": "slug", "letterboxd_community": "bool",
         "monthly_day": "int:1:28", "monthly_hour": "int:0:23", "refresh_hour": "int:0:23",

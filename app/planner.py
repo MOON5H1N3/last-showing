@@ -28,7 +28,7 @@ MAJOR = ("disney", "warner", "universal", "sony", "paramount", "20th century")
 MID = ("studiocanal", "lionsgate", "entertainment film", "altitude", "signature", "sky", "black bear",
        "elevation", "focus", "eone", "vertigo", "searchlight", "a24")
 MONTHS_AHEAD = 3  # this month and the next two
-PLAN_VERSION = 6  # bump when the plan's shape changes, so a saved plan from an older version is rebuilt
+PLAN_VERSION = 7  # bump when the plan's shape changes, so a saved plan from an older version is rebuilt
 CONF_SHRINK = {"high": 1.0, "medium": 0.9, "low": 0.75, "none": 0.5}
 
 
@@ -181,6 +181,8 @@ class Item:
     leaving: bool = False                         # likely gone within a week
     why: str = ""                                 # the single most telling reason, for one-line lists
     extra: bool = False                           # a re-release or event: shown on its own, not competing for tickets
+    wanted: bool = False                          # you marked it "Want to see"
+    paid_trip: bool = False                       # wanted, but no free ticket fits before it's likely to leave
     p_two_weeks: float | None = None              # chance it's still on two weeks after its first showing here
 
 
@@ -318,6 +320,7 @@ def make_plan(db: DB, s: Settings, now: datetime | None = None, model: TasteMode
 
     dismissed = {r["film_id"] for r in db.q("SELECT film_id FROM dismissed")}
     pins = {r["film_id"]: r["month"] for r in db.q("SELECT film_id, month FROM pins")}
+    wants = {r["film_id"] for r in db.q("SELECT film_id FROM wants")}
     months = [m_start]
     for _ in range(MONTHS_AHEAD - 1):
         months.append(month_bounds(months[-1])[2])
@@ -417,7 +420,9 @@ def make_plan(db: DB, s: Settings, now: datetime | None = None, model: TasteMode
             item.priority = adj + s.big_screen_weight * max(0.0, item.big_screen - 0.5)
         # Re-releases and events sit in their own section rather than taking tickets from new films, unless
         # you'd really love one you haven't seen, or it's on your watchlist (a pin always counts)
-        item.extra = f["kind"] != "film" and not on_wl and not (yours is None and rating >= model.mu + 0.75)
+        item.wanted = f["film_id"] in wants
+        item.extra = (f["kind"] != "film" and not on_wl and not item.wanted
+                      and not (yours is None and rating >= model.mu + 0.75))
         base.append((item, run, days))
         first_listed = min(all_days) if all_days else None
         wk = sum(1 for d in all_days if first_listed <= d < first_listed + timedelta(days=7)) if first_listed else None
@@ -452,7 +457,62 @@ def make_plan(db: DB, s: Settings, now: datetime | None = None, model: TasteMode
             # most films at a multiplex last under three weeks, so only flag the unusually short
             item.short_run = item.p_two_weeks < 0.25 and opens >= today - timedelta(days=7)
 
-    # Plan each month in turn. A film picked in an earlier month isn't picked again, and pins come first.
+    def availability(item: Item, run: RunEstimate, days: list[date], k: int) -> tuple[float, list[date], bool] | None:
+        """Chance a film is showing during month k (None if it can't be), its days that month, and whether it
+        opens that month."""
+        ms = months[k]
+        me = month_bounds(ms)[1]
+        release = date.fromisoformat(item.release_date) if item.release_date else None
+        in_month = [d for d in days if ms <= d <= me and d >= today]
+        opens_here = bool(release and ms <= release <= me and release >= today)
+        if in_month:
+            p_avail = 1.0
+        elif k == 0:
+            if not (opens_here and not days):
+                return None
+            p_avail = 1.0
+        elif item.kind != "film":
+            return None  # events and re-releases: only on their listed dates
+        elif release and release > me:
+            return None
+        else:
+            p_avail = 1.0 if opens_here else run.p_showing(today if k == 0 else ms)
+        return (p_avail, in_month, opens_here) if p_avail >= 0.3 else None
+
+    def is_used(item: Item) -> bool:
+        return item.film_id in used_films or bool(item.tmdb_id and f"tmdb:{item.tmdb_id}" in used_films)
+
+    # Want to see: fit every wanted film into free tickets across the months, soonest deadline first (that fits
+    # the most in). Anything that can't fit before it's likely to leave becomes a paid trip.
+    month_keys = [m.strftime("%Y-%m") for m in months]
+    slots = [remaining] + [s.tickets] * (len(months) - 1)
+    for fid, mk in pins.items():
+        if mk in month_keys and fid not in dismissed:
+            slots[month_keys.index(mk)] -= 1
+    wanted_free: dict[str, int] = {}
+    wanted_paid: dict[str, int] = {}
+    wanted_window: dict[str, list[int]] = {}
+    for item, run, days in base:
+        if item.wanted and not is_used(item) and item.film_id not in pins:
+            win = [k for k in range(len(months)) if (a_ := availability(item, run, days, k)) and a_[0] >= 0.5]
+            if win:
+                wanted_window[item.film_id] = win
+    order = {item.film_id: item for item, _, _ in base}
+    for k in range(len(months)):
+        ready = [fid for fid, win in wanted_window.items()
+                 if k in win and fid not in wanted_free and fid not in wanted_paid]
+        ready.sort(key=lambda fid: (wanted_window[fid][-1], order[fid].est_end))
+        for fid in ready:
+            if slots[k] > 0:
+                wanted_free[fid] = k
+                slots[k] -= 1
+            elif wanted_window[fid][-1] == k:  # last chance and no free ticket left
+                wanted_paid[fid] = wanted_window[fid][0]  # go in the first month it's on, before it can leave
+    wanted_outside = [order[fid].title for fid in wants if fid in order and fid not in wanted_window
+                      and not is_used(order[fid]) and fid not in pins]
+
+    # Plan each month in turn. A film picked in an earlier month isn't picked again; pins and wanted films come
+    # first, and any free tickets left go to the best recommendations.
     month_plans = []
     taken: set[str] = set(used_films)
     for k, ms in enumerate(months):
@@ -462,27 +522,19 @@ def make_plan(db: DB, s: Settings, now: datetime | None = None, model: TasteMode
         ref = today if current else ms
         tickets = remaining if current else s.tickets
         key = ms.strftime("%Y-%m")
-        cands, opening = [], []
+        cands, opening, paid = [], [], []
         for item, run, days in base:
             if item.film_id in taken or (item.tmdb_id and f"tmdb:{item.tmdb_id}" in taken):
                 continue
+            here = availability(item, run, days, k)
+            mine_free = wanted_free.get(item.film_id) == k
+            mine_paid = wanted_paid.get(item.film_id) == k
+            if item.wanted and item.film_id not in pins and not (mine_free or mine_paid):
+                continue  # a wanted film belongs to the month it was fitted into
+            if here is None:
+                continue
+            p_avail, in_month, opens_here = here
             release = date.fromisoformat(item.release_date) if item.release_date else None
-            in_month = [d for d in days if ms <= d <= me and d >= today]
-            opens_here = bool(release and ms <= release <= me and release >= today)
-            if in_month:
-                p_avail = 1.0
-            elif current:
-                if not (opens_here and not days):
-                    continue
-                p_avail = 1.0
-            elif item.kind != "film":
-                continue  # events and re-releases: only on their listed dates
-            elif release and release > me:
-                continue
-            else:
-                p_avail = 1.0 if opens_here else run.p_showing(ref)
-            if p_avail < 0.3:
-                continue
             p_next = run.p_showing(following + timedelta(days=6))
             it = replace(item)
             it.p_available = round(p_avail, 2)
@@ -491,13 +543,17 @@ def make_plan(db: DB, s: Settings, now: datetime | None = None, model: TasteMode
             it.sessions = [x for x in item.sessions if ms.isoformat() <= x["start"][:10] <= me.isoformat()][:6]
             it.first_date = (in_month[0] if in_month else max(ref, release) if release else ref).isoformat()
             it.priority = round(item.priority - s.urgency_weight * p_next - 0.8 * (1 - p_avail), 3)
-            it.pinned = pins.get(it.film_id) == key
+            it.pinned = pins.get(it.film_id) == key or mine_free
+            it.paid_trip = mine_paid
             if item.kind == "film":
                 start = max(date.fromisoformat(it.first_date), today)
                 it.p_two_weeks = round(run.p_showing(start + timedelta(days=14)), 2)
                 it.short_run = it.p_two_weeks < 0.25 and (release is None or release >= today - timedelta(days=7))
             it.opens_in_month = opens_here
             it.leaving = current and date.fromisoformat(it.est_end) <= today + timedelta(days=7)
+            if mine_paid:
+                paid.append(it)
+                continue
             if opens_here:
                 opening.append(it)
             cands.append(it)
@@ -507,11 +563,12 @@ def make_plan(db: DB, s: Settings, now: datetime | None = None, model: TasteMode
         cands = [c for c in cands if c not in extras]
         pinned = [c for c in cands if c.pinned]
         picks = (pinned + [c for c in cands if not c.pinned])[:max(tickets, len(pinned))]
-        for p in picks:
+        for p in picks + paid:
             end = date.fromisoformat(p.est_end)
             p.watch_by = min(max(end, date.fromisoformat(p.first_date)), me).isoformat()
             taken.add(p.film_id)
         picks.sort(key=lambda p: p.watch_by)
+        paid.sort(key=lambda p: p.watch_by)
         rest = [c for c in cands if c not in picks]
         leaving = []
         if current:
@@ -519,16 +576,11 @@ def make_plan(db: DB, s: Settings, now: datetime | None = None, model: TasteMode
             leaving = [i for i in rest if date.fromisoformat(i.est_end) <= soon_cut and (i.predicted or 0) >= model.mu]
             leaving.sort(key=lambda i: i.est_end)
 
-        # Worth paying for: your paid trips, or with none set, the next best films as optional extras.
-        # Cinema first: any film you'd clearly enjoy qualifies, big-screen films simply rank a little higher.
-        n_paid = s.paid_trips or (5 if s.tickets else 8)  # with no tickets, this is the main list
-        worth = [i for i in rest if (i.predicted or 0) >= model.mu + 0.3][:n_paid]  # rest is in priority order
-        if s.paid_trips:
-            for w in worth:
-                end = date.fromisoformat(w.est_end)
-                w.watch_by = min(max(end, date.fromisoformat(w.first_date)), me).isoformat()
-                taken.add(w.film_id)
-        worth.sort(key=lambda i: i.watch_by or i.first_date or "")
+        # Worth paying for: the next best films as optional extras. Cinema first: any film you'd clearly enjoy
+        # qualifies, big-screen films simply rank a little higher.
+        n_worth = 5 if s.tickets else 8  # with no tickets, this is the main list
+        worth = [i for i in rest if (i.predicted or 0) >= model.mu + 0.3][:n_worth]  # rest is in priority order
+        worth.sort(key=lambda i: i.first_date or "")
         # Catching later: only quiet films that didn't make the cut above, so few new releases end up here
         # (a film above the "worth paying for" bar is never sent home; if the top few are full, it stays in
         # Everything else as a cinema option)
@@ -546,13 +598,24 @@ def make_plan(db: DB, s: Settings, now: datetime | None = None, model: TasteMode
             "month": key, "month_label": ms.strftime("%B %Y"), "month_name": ms.strftime("%B"),
             "month_start": ms.isoformat(), "month_end": me.isoformat(), "current": current,
             "tickets_left": tickets if current else max(0, tickets - 0),
-            "picks": [asdict(p) for p in picks], "leaving_soon": [asdict(i) for i in leaving[:6]],
-            "worth_paying": [asdict(i) for i in worth], "paid_planned": bool(s.paid_trips),
+            "picks": [asdict(p) for p in picks], "paid_trips": [asdict(p) for p in paid],
+            "leaving_soon": [asdict(i) for i in leaving[:6]],
+            "worth_paying": [asdict(i) for i in worth],
             "at_home": [asdict(i) for i in home], "everything": [asdict(i) for i in everything],
             "extras": [asdict(i) for i in extras],
             "also_good": [asdict(i) for i in worth], "opening": [asdict(i) for i in opening],
             "candidates": [{"film_id": c.film_id, "title": c.title, "tmdb_id": c.tmdb_id} for c in cands],
         })
+
+    wanted_pinned = [fid for fid in wants if fid in pins and fid in order and not is_used(order[fid])]
+    want_summary = {
+        "total": len(wanted_free) + len(wanted_paid) + len(wanted_pinned) + len(wanted_outside),
+        "free": len(wanted_free) + len(wanted_pinned),
+        "paid": [{"film_id": fid, "title": order[fid].title, "month_name": months[k].strftime("%B")}
+                 for fid, k in sorted(wanted_paid.items(), key=lambda x: x[1])],
+        "later": wanted_outside,
+        "free_tickets": remaining + s.tickets * (len(months) - 1),
+    }
 
     cur = month_plans[0]
     days_left = (m_end - today).days + 1
@@ -576,6 +639,7 @@ def make_plan(db: DB, s: Settings, now: datetime | None = None, model: TasteMode
         "unscored": unscored,
         "all_candidates": cur["candidates"],
         "pins": [{"film_id": k2, "month": v} for k2, v in pins.items()],
+        "wants": want_summary,
         "dismissed": [dict(r) for r in db.q("SELECT * FROM dismissed ORDER BY created_at DESC")],
         "model": model.summary(),
         "runs": {"films": run_model.n_films if run_model else 0, "ready": bool(run_model and run_model.ready)},

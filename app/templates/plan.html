@@ -56,6 +56,15 @@
   {% endif %}
 </section>
 
+{% set w = plan.get('wants') or {} %}
+{% if w.get('total') %}
+<div class="wantsum" style="margin-top:28px">
+  <strong>You want to see {{ w.total }} film{{ 's' if w.total != 1 }}.</strong>
+  {% if not w.paid %}Your free tickets cover {{ 'it' if w.total == 1 else 'all of them' }}{% if w.later %}, apart from {{ w.later|join(', ') }}, which isn't showing yet{% endif %}.
+  {% else %}Your {{ w.free_tickets }} free tickets over the next three months cover {{ w.free }}. You'd need {{ w.paid|length }} paid trip{{ 's' if w.paid|length != 1 }}: {% for x in w.paid %}<a href="/film/{{ x.film_id }}">{{ x.title }}</a> in {{ x.month_name }}{{ ', ' if not loop.last else '.' }}{% endfor %}{% if w.later %} {{ w.later|join(', ') }} isn't showing yet.{% endif %}{% endif %}
+</div>
+{% endif %}
+
 {% if is_current and plan.get('warning') %}{% set w = plan.warning %}
 <div class="notice" role="alert" style="margin-top:28px">
   <strong>{{ w.tickets_left }} ticket{{ 's' if w.tickets_left != 1 }} {{ 'expires' if w.tickets_left == 1 else 'expire' }} {% if w.days_left == 1 %}tonight{% else %}in {{ w.days_left }} days{% endif %}.</strong>
@@ -78,11 +87,20 @@
 </section>
 {% endif %}
 
+{% if mp.get('paid_trips') %}
+<section class="section">
+  <div class="rule"></div>
+  <h2 class="sec">Paid trip{{ 's' if mp.paid_trips|length != 1 }} you'll need</h2>
+  <p class="lead">Films on your Want to see list that won't fit in your free tickets before they're likely to leave. {% if mp.paid_trips|length == 1 %}It's{% else %}They're{% endif %} worth paying for, or pin one to swap it with a free ticket.</p>
+  <div class="list">{% for i in mp.paid_trips %}{{ m.row(i, m.when(i, is_current), ('See by ' ~ (i.watch_by|dt('%a %d %b')) ~ '. ' if i.watch_by else '') ~ (i.why or '')) }}{% endfor %}</div>
+</section>
+{% endif %}
+
 {% if mp.get('worth_paying') %}
 <section class="section">
   <div class="rule"></div>
-  <h2 class="sec">{% if mp.paid_planned %}Your paid trip{{ 's' if mp.worth_paying|length != 1 }}{% elif not n_tickets %}Worth seeing{% else %}Worth paying for{% endif %}</h2>
-  <p class="lead">{% if not n_tickets and not mp.paid_planned %}The films most worth a cinema trip.{% elif mp.paid_planned %}Planned like your tickets, and not repeated in later months.{% else %}The next best new films, if you fancy paying. Set paid trips a month in <a href="/settings#recs">Settings</a> to plan them properly.{% endif %}</p>
+  <h2 class="sec">{% if not n_tickets %}Worth seeing{% else %}Worth paying for{% endif %}</h2>
+  <p class="lead">{% if not n_tickets %}The films most worth a cinema trip.{% else %}The next best new films, if you fancy paying. Star one (☆) to add it to Want to see, and it gets a ticket.{% endif %}</p>
   <div class="list">{% for i in mp.worth_paying %}{{ m.row(i, m.when(i, is_current), m.note(i, 'screen')) }}{% endfor %}</div>
 </section>
 {% endif %}

@@ -172,19 +172,12 @@ class TestBigScreen(unittest.TestCase):
         self.assertLess(drama[0], 0.4)
         self.assertEqual(drama[1], "Fine at home")
 
-    def test_layout_and_paid_trips(self):
+    def test_layout(self):
         db = seeded_db()
-        p = make_plan(db, settings(), NOW)
-        m0 = p["months"][0]
-        self.assertLessEqual(len(m0["worth_paying"]), 3)
-        self.assertFalse(m0["paid_planned"])
+        m0 = make_plan(db, settings(), NOW)["months"][0]
+        self.assertLessEqual(len(m0["worth_paying"]), 5)
         self.assertTrue(all(x["kind"] != "film" or x["big_screen"] < 0.4 for x in m0["at_home"]))
         self.assertTrue(all(x["home_from"] for x in m0["at_home"]))
-        p2 = make_plan(db, settings(paid_trips=1), NOW)
-        self.assertTrue(p2["months"][0]["paid_planned"])
-        paid = {x["film_id"] for x in p2["months"][0]["worth_paying"]}
-        later = {x["film_id"] for m in p2["months"][1:] for k in ("picks", "worth_paying") for x in m[k]}
-        self.assertFalse(paid & later)  # a planned paid trip isn't planned again
 
     def test_big_screen_weight_moves_priority(self):
         db = seeded_db()
@@ -207,3 +200,56 @@ class TestBigScreen(unittest.TestCase):
         db.x("INSERT INTO pins VALUES('HO5','2026-10','x')")
         p = make_plan(db, settings(), NOW)
         self.assertIn("HO5", [x["film_id"] for x in p["months"][0]["picks"]])
+
+
+class TestWantToSee(unittest.TestCase):
+    def want(self, db, *ids):
+        for fid in ids:
+            db.x("INSERT OR REPLACE INTO wants(film_id,title,created_at) VALUES(?,?,?)", (fid, fid, "x"))
+
+    def placed(self, p):
+        free = {x["film_id"]: m["month"] for m in p["months"] for x in m["picks"] if x.get("wanted")}
+        paid = {x["film_id"]: m["month"] for m in p["months"] for x in m["paid_trips"]}
+        return free, paid
+
+    def test_every_wanted_film_placed_once(self):
+        db = seeded_db()
+        ids = ["HO1", "HO2", "HO3", "HO4", "HO8", "HO9"]
+        self.want(db, *ids)
+        s = settings(tickets_per_month=1, ticket_source="custom")
+        p = make_plan(db, s, NOW)
+        free, paid = self.placed(p)
+        self.assertFalse(set(free) & set(paid))
+        for fid in ids:
+            self.assertTrue(fid in free or fid in paid or p["films"][fid]["title"] in p["wants"]["later"], fid)
+        for m in p["months"]:
+            self.assertLessEqual(len([x for x in m["picks"] if x.get("wanted")]), 1)  # one free ticket a month
+        self.assertEqual(p["wants"]["free"], len(free))
+        self.assertEqual(len(p["wants"]["paid"]), len(paid))
+        self.assertGreater(len(paid), 0)  # six wanted films can't fit in three free tickets
+
+    def test_enough_tickets_means_no_paid_trips(self):
+        db = seeded_db()
+        self.want(db, "HO1", "HO8")
+        p = make_plan(db, settings(), NOW)  # two free tickets a month
+        free, paid = self.placed(p)
+        self.assertEqual(paid, {})
+        self.assertEqual(set(free), {"HO1", "HO8"})
+
+    def test_wanted_beats_recommendations(self):
+        db = seeded_db()
+        base = make_plan(db, settings(), NOW)
+        top = {x["film_id"] for x in base["months"][0]["picks"]}
+        other = next(f for f in ["HO2", "HO4", "HO11"] if f not in top and f in base["films"])
+        self.want(db, other)
+        p = make_plan(db, settings(), NOW)
+        free, _ = self.placed(p)
+        self.assertIn(other, free)
+
+    def test_wanted_event_isnt_an_extra(self):
+        db = seeded_db()
+        self.want(db, "HO5")  # a re-release
+        p = make_plan(db, settings(), NOW)
+        self.assertFalse(p["films"]["HO5"]["extra"])
+        free, paid = self.placed(p)
+        self.assertTrue("HO5" in free or "HO5" in paid)

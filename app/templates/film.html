@@ -7,6 +7,7 @@
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
 .stats>div{background:var(--panel,#141414);border:1px solid #262626;border-radius:6px;padding:14px 16px}
 .stats b{display:block;font-size:26px;line-height:1.1;margin-bottom:4px}
+.pinmonths{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap}
 .why{display:grid;grid-template-columns:76px minmax(0,1fr);gap:8px 12px}
 @media (max-width:820px){.filmhero{grid-template-columns:minmax(0,1fr)}}
 {% endblock %}
@@ -43,10 +44,17 @@
     </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap">
       {% if plan.tickets_total %}<form class="inline" method="post" action="/use"><input type="hidden" name="film_id" value="{{ f.film_id }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn main">Used a ticket on this</button></form>{% endif %}
+      {{ m.want_btn(f) }}
       {% if pinned_month %}
       <form class="inline" method="post" action="/unpin"><input type="hidden" name="film_id" value="{{ f.film_id }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn">Unpin ({{ (pinned_month ~ '-01')|dt('%B') }})</button></form>
-      {% else %}
-      <form class="inline" method="post" action="/pin"><input type="hidden" name="film_id" value="{{ f.film_id }}"><input type="hidden" name="month" value="{{ month_key }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn">I'm seeing this</button></form>
+      {% elif pin_months|length == 1 %}
+      <form class="inline" method="post" action="/pin"><input type="hidden" name="film_id" value="{{ f.film_id }}"><input type="hidden" name="month" value="{{ pin_months[0][0] }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn">I'm seeing this in {{ pin_months[0][1] }}</button></form>
+      {% elif pin_months %}
+      <form class="inline pinmonths" method="post" action="/pin" aria-label="I'm seeing this in">
+        <input type="hidden" name="film_id" value="{{ f.film_id }}"><input type="hidden" name="next" value="{{ path }}">
+        <span class="muted small">I'm seeing this in</span>
+        {% for key, name in pin_months %}<button class="btn small" name="month" value="{{ key }}">{{ name }}</button>{% endfor %}
+      </form>
       {% endif %}
       <form class="inline" method="post" action="/dismiss"><input type="hidden" name="film_id" value="{{ f.film_id }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn ghost">Not for me</button></form>
     </div>

@@ -106,10 +106,6 @@ input[type=range]{width:100%;accent-color:var(--amber)}
     <div><input id="bigw" type="range" name="big_screen_weight" min="0" max="100" value="{{ (s.big_screen_weight * 100)|round|int }}"><div class="ends"><span>No lift</span><span>Strong lift</span></div></div>
   </div>
   <div class="srow">
-    <div><label class="lab" for="paid">Paid trips a month</label><div class="help">On top of your tickets. The plan picks this many films worth paying for. At 0 it still suggests a few, as optional extras.</div></div>
-    <div><input id="paid" name="paid_trips" type="number" min="0" max="8" value="{{ s.paid_trips }}" class="field" style="width:72px;text-align:center;font-family:var(--display);font-weight:800;font-size:28px"></div>
-  </div>
-  <div class="srow">
     <div><label class="lab" for="favw">Chase favourites</label><div class="help">Lift films with a better-than-usual chance of a 4.5★ or higher.</div></div>
     <div><input id="favw" type="range" name="favourite_weight" min="0" max="100" value="{{ (s.favourite_weight * 50)|round|int }}"><div class="ends"><span>Off</span><span>Strong</span></div></div>
   </div>

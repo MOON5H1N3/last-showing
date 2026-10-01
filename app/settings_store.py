@@ -64,7 +64,7 @@ def from_form(form, cinemas: list[dict]) -> dict:
     for k in ("ticket_source", "ticket_chain", "letterboxd_user"):
         if form.get(k) is not None:
             v[k] = form.get(k)
-    for k in ("tickets_per_month", "monthly_day", "monthly_hour", "refresh_hour", "paid_trips"):
+    for k in ("tickets_per_month", "monthly_day", "monthly_hour", "refresh_hour"):
         if form.get(k) not in (None, ""):
             v[k] = form.get(k)
     v["ticket_rollover"] = form.get("ticket_expiry") == "rollover"

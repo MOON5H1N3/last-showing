@@ -151,7 +151,13 @@ def create_app(engine: Engine, bot=None) -> Starlette:
         if not film:
             return render("missing.html", request, "films", status_code=404)
         pinned = next((x["month"] for x in p.get("pins", []) if x["film_id"] == fid), None)
-        return render("film.html", request, "films", f=film, pinned_month=pinned,
+        # the months it could be pinned to: those where the plan expects it to be showing
+        sections = ("picks", "paid_trips", "worth_paying", "at_home", "everything", "extras")
+        pin_months = [(m["month"], m["month_name"]) for m in p.get("months", [])
+                      if any(x["film_id"] == fid for sec in sections for x in m.get(sec, []))]
+        if not pin_months and p.get("month"):
+            pin_months = [(p["month"], datetime.now(s.tz).strftime("%B"))]
+        return render("film.html", request, "films", f=film, pinned_month=pinned, pin_months=pin_months,
                       current_month=p.get("month"))
 
     async def taste_page(request: Request):
@@ -225,6 +231,23 @@ def create_app(engine: Engine, bot=None) -> Starlette:
              (fid, month, datetime.now().isoformat(timespec="seconds")))
         engine.replan()
         return _back(form, f"Pinned {_title(fid)[0]}. A ticket is kept for it.")
+
+    async def want(request: Request):
+        form = await request.form()
+        fid = form.get("film_id")
+        title, tid = _title(fid)
+        if not fid:
+            return _back(form, "Couldn't add that")
+        db.x("INSERT OR REPLACE INTO wants(film_id,tmdb_id,title,created_at) VALUES(?,?,?,?)",
+             (fid, tid, title, datetime.now().isoformat(timespec="seconds")))
+        engine.replan()
+        return _back(form, f"{title} is on your Want to see list. It gets a free ticket first, or a paid trip if none fits.")
+
+    async def unwant(request: Request):
+        form = await request.form()
+        db.x("DELETE FROM wants WHERE film_id=?", (form.get("film_id"),))
+        engine.replan()
+        return _back(form, f"{_title(form.get('film_id'))[0]} is off your Want to see list")
 
     async def unpin(request: Request):
         form = await request.form()
@@ -319,6 +342,8 @@ def create_app(engine: Engine, bot=None) -> Starlette:
         Route("/undo", undo, methods=["POST"]),
         Route("/pin", pin, methods=["POST"]),
         Route("/unpin", unpin, methods=["POST"]),
+        Route("/want", want, methods=["POST"]),
+        Route("/unwant", unwant, methods=["POST"]),
         Route("/dismiss", dismiss, methods=["POST"]),
         Route("/undismiss", undismiss, methods=["POST"]),
         Route("/refresh", refresh, methods=["POST"]),

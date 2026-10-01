@@ -62,7 +62,9 @@ Re-upload an export every few months to pick up old ratings you've changed. New 
 | **Taste** | What it's learned about you, and how accurate it is on films it hadn't seen |
 | **Settings** | Tickets, cinema, recommendation sliders, Letterboxd, Discord, schedule, backups, and films you've ruled out |
 
-On any film: **Used a ticket**, **I'm seeing this** (pins it to a month and keeps a ticket for it) and **Not for me** (never suggested again). The same buttons come with the monthly Discord DM, and `/picks`, `/used`, `/undo` and `/refresh` work in your DMs with the bot.
+On any film: **Used a ticket**, **☆ Want to see**, **I'm seeing this** (pins it to a month you choose) and **Not for me** (never suggested again).
+
+**Want to see** is how you tell Last Showing which films you're set on. It fits them into your free tickets across this month and the next two, giving tickets first to the films that will leave soonest so as many as possible fit. Any that can't fit before they're likely to leave become **paid trips**, in the month you'd need to go, and the top of the Plan page says how many you'd need. Free tickets left over go to the best recommendations. The same buttons come with the monthly Discord DM, and `/picks`, `/used`, `/undo` and `/refresh` work in your DMs with the bot.
 
 ## Settings
 
@@ -70,7 +72,7 @@ Everything except secrets is on the Settings page and takes effect when you save
 
 - **Tickets:** Monzo Perks (1 a month), Custom (any number, e.g. 2 if you have a spare), or No tickets. Also expiry (end of month or roll over one month), and showings your tickets don't cover (EPIC, 3D, Ultra Lux).
 - **Cinema:** any Vue in the UK.
-- **Recommendations:** best film first vs never miss anything, big screen vs fine at home, paid trips a month (default 0), how hard to chase likely favourites, watchlist boost, and whether to include events, re-releases and films you've seen.
+- **Recommendations:** best film first vs never miss anything, big screen vs fine at home, how hard to chase likely favourites, watchlist boost, and whether to include events, re-releases and films you've seen.
 - **Letterboxd, Discord, schedule and data.**
 
 `.env` holds the secrets (TMDB key, Discord token and user ID, dashboard password) and first-run defaults. Change `.env` only for secrets, then run `docker compose up -d`.
