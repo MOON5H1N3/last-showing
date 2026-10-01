@@ -52,8 +52,12 @@ class Engine:
     def plan(self) -> dict:
         from .planner import PLAN_VERSION
         p = self.db.get("plan") or {}
+        # rebuild if the plan was saved by an older version, a new month has started, or this version of the app
+        # hasn't built one yet (so new features, like saving predictions, start working straight after an update)
+        app_version = self._app_version()
         stale = p and (p.get("version") != PLAN_VERSION
-                       or p.get("month") != datetime.now(self.s.tz).strftime("%Y-%m"))
+                       or p.get("month") != datetime.now(self.s.tz).strftime("%Y-%m")
+                       or p.get("app_version") != app_version)
         if stale:  # saved by an older version, or a new month has started since
             try:
                 p = self.replan()
@@ -61,9 +65,17 @@ class Engine:
                 log.warning("couldn't rebuild the plan: %s", e)
         return p
 
+    @staticmethod
+    def _app_version() -> str:
+        try:
+            return (Path(__file__).resolve().parents[1] / "VERSION").read_text().strip()
+        except OSError:
+            return "dev"
+
     def replan(self) -> dict:
         from .planner import record_predictions
         p = make_plan(self.db, self.s)
+        p["app_version"] = self._app_version()
         self.db.set("plan", p)
         try:
             record_predictions(self.db, p, datetime.now(self.s.tz).date())
