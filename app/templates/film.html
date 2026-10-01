@@ -97,11 +97,9 @@
   <h2 class="sec" style="font-size:34px;margin-bottom:6px">Buzz</h2>
   <p class="muted small" style="margin:0 0 18px">{{ {'big': 'More attention than most films at your cinema right now', 'some': 'About as much attention as a typical film at your cinema', 'quiet': 'Less attention than most films at your cinema'}[b.level] }}. Buzz doesn't change the predicted rating; it's here so a big release is never a surprise.</p>
   <div class="stats">
-    {% if b.get('lists') is not none %}<div><b>{{ '{:,}'.format(b.lists) }}</b><span class="muted small">Letterboxd lists it's on</span></div>{% endif %}
-    {% if b.get('watched') is not none %}<div><b>{{ '{:,}'.format(b.watched) }}</b><span class="muted small">Letterboxd members who've seen it{% if f.release_date and f.release_date > today.isoformat() %} (early screenings){% endif %}</span></div>{% endif %}
-    {% if b.get('likes') is not none %}<div><b>{{ '{:,}'.format(b.likes) }}</b><span class="muted small">Letterboxd likes</span></div>{% endif %}
+    {% if b.get('tmdb_popularity') %}<div><b>{{ '%.0f'|format(b.tmdb_popularity) }}</b><span class="muted small">TMDB popularity (people looking it up)</span></div>{% endif %}
     {% if b.get('opening_showings') %}<div><b>{{ b.opening_showings }}</b><span class="muted small">Showings in its opening week here</span></div>{% endif %}
-    {% if b.get('tmdb_popularity') %}<div><b>{{ '%.0f'|format(b.tmdb_popularity) }}</b><span class="muted small">TMDB popularity</span></div>{% endif %}
+    {% if b.get('early_ratings') %}<div><b>{{ '{:,}'.format(b.early_ratings) }}</b><span class="muted small">Letterboxd ratings before release (early screenings)</span></div>{% endif %}
   </div>
 </section>
 {% endif %}

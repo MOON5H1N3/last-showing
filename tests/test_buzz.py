@@ -99,22 +99,22 @@ class TestSizeEffect(unittest.TestCase):
 class TestPlanBuzz(unittest.TestCase):
     def test_opening_uncapped_and_buzz(self):
         db = seeded_db()
-        for i, (fid, m) in enumerate(CINEMA_META.items()):
-            db.x("INSERT OR REPLACE INTO community(tmdb_id,lb_avg,fetched_at,rating_count,watched,lists,likes) VALUES(?,?,?,?,?,?,?)",
-                 (m["id"], None if i % 3 == 0 else 3.4, NOW.isoformat(), None if i % 3 == 0 else 5000, 100 * i, 1000 * (i + 1), 10 * i))
+        for i, r in enumerate(db.q("SELECT tmdb_id, data FROM movies")):
+            m = json.loads(r["data"])
+            m["popularity"] = 5.0 + 10 * i
+            db.x("UPDATE movies SET data=? WHERE tmdb_id=?", (json.dumps(m), r["tmdb_id"]))
         p = make_plan(db, settings(), NOW)
-        opening = [o for m in p["months"] for o in m["opening"]]
         dates = [o["first_date"] for o in p["months"][0]["opening"]]
         self.assertEqual(dates, sorted(dates))  # date order
         films = list(p["films"].values())
         self.assertTrue(all(f["buzz"] for f in films))
-        most = max(films, key=lambda f: f["buzz"].get("lists") or 0)
-        least = min(films, key=lambda f: f["buzz"].get("lists") or 10 ** 9)
+        self.assertTrue(all("lists" not in f["buzz"] for f in films))  # the blocked Letterboxd box isn't used
+        most = max(films, key=lambda f: f["buzz"].get("tmdb_popularity") or 0)
+        least = min(films, key=lambda f: f["buzz"].get("tmdb_popularity") or 10 ** 9)
         self.assertGreater(most["buzz"]["score"], least["buzz"]["score"])
         for m in p["months"]:
             ids = [x["film_id"] for k in ("picks", "worth_paying", "at_home", "everything") for x in m[k]]
             self.assertEqual(len(ids), len(set(ids)))  # each film shown once
-        self.assertTrue(opening is not None)
 
     def test_buzz_check_and_log(self):
         db = seeded_db()

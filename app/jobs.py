@@ -194,8 +194,8 @@ class Engine:
                     stale = (datetime.now() - timedelta(days=2)).isoformat()  # cinema films: buzz moves quickly
                     rows = db.q("SELECT tmdb_id, fetched_at, rating_count, lists FROM community")
                     have = {r["tmdb_id"]: r["fetched_at"] for r in rows}
-                    # read before rating counts and buzz were collected: fetch again, oldest first
-                    no_counts = {r["tmdb_id"] for r in rows if r["rating_count"] is None and r["lists"] is None}
+                    # read before rating counts were collected: fetch again, oldest first
+                    no_counts = {r["tmdb_id"] for r in rows if r["rating_count"] is None}
                     cinema = sorted((r["tmdb_id"] for r in db.q("SELECT film_id, tmdb_id FROM vue_films WHERE tmdb_id IS NOT NULL")
                                      if r["film_id"] in listed and (have.get(r["tmdb_id"], "") < stale
                                                                     or r["tmdb_id"] in no_counts)),
@@ -204,12 +204,9 @@ class Engine:
                     rated = [t for t in rated_ids if t not in have] + sorted(
                         (t for t in rated_ids if t in no_counts), key=lambda t: have.get(t, ""))
                     todo = cinema[:s.community_fetch_limit] + rated[:s.community_backfill]
-                    n = await letterboxd.fetch_community(db, todo, len(todo), buzz_ids=set(cinema))
+                    n = await letterboxd.fetch_community(db, todo, len(todo))
                     left = max(0, len(rated) - s.community_backfill)
-                    b = db.get("letterboxd_buzz_last") or {}
-                    msg = f"{n} averages fetched, {b.get('with_buzz', 0)} with buzz (lists, watches, likes)"
-                    if b.get("error") and not b.get("with_buzz"):
-                        msg += f"; buzz failed: {b['error']}"
+                    msg = f"{n} averages fetched"
                     return msg + (f"; {left} of your rated films still to backfill" if left else "")
                 await step("Letterboxd averages", do_comm)
 

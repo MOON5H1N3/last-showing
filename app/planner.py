@@ -243,8 +243,9 @@ def _pct(values: dict, key) -> float | None:
 def buzz_for(key, lists: dict, pops: dict, opening: dict, raw: dict) -> dict:
     """How much attention a film is getting compared with everything else at your cinema right now.
 
-    Averages whichever of these exist: Letterboxd lists it's on (people planning to watch it), TMDB popularity
-    (page views, trailers), and how many showings your Vue gave its opening week (the cinema's own bet)."""
+    Averages whichever of these exist: TMDB popularity (page views, trailers), how many showings your Vue gave
+    its opening week (the cinema's own bet), and, for films not out yet, how many Letterboxd members have
+    already rated it (early screenings)."""
     parts = [p for p in (_pct(lists, key), _pct(pops, key), _pct(opening, key)) if p is not None]
     if not parts:
         return {}
@@ -427,9 +428,8 @@ def make_plan(db: DB, s: Settings, now: datetime | None = None, model: TasteMode
         first_listed = min(all_days) if all_days else None
         wk = sum(1 for d in all_days if first_listed <= d < first_listed + timedelta(days=7)) if first_listed else None
         buzz_in[f["film_id"]] = {
-            "lists": crow["lists"] if crow is not None else None,
-            "watched": crow["watched"] if crow is not None else None,
-            "likes": crow["likes"] if crow is not None else None,
+            # early Letterboxd ratings only mean buzz before release; afterwards they just measure how big it got
+            "early_ratings": (crow["rating_count"] if crow is not None and release and release > today else None),
             "tmdb_popularity": round(meta["popularity"], 1) if meta.get("popularity") else None,
             # a full opening week listed at your Vue (not a one-off preview)
             "opening_showings": wk if (f["kind"] == "film" and wk and wk >= 3 and release and
@@ -446,7 +446,7 @@ def make_plan(db: DB, s: Settings, now: datetime | None = None, model: TasteMode
     base = [b for i, b in enumerate(base) if not (b[0].tmdb_id and b[0].kind == "film") or seen_tmdb[b[0].tmdb_id] == i]
 
     # buzz is relative: compared with everything else showing or coming to your cinema
-    lists = {k: math.log1p(v["lists"]) for k, v in buzz_in.items() if v["lists"] is not None}
+    lists = {k: math.log1p(v["early_ratings"]) for k, v in buzz_in.items() if v["early_ratings"] is not None}
     pops = {k: v["tmdb_popularity"] for k, v in buzz_in.items() if v["tmdb_popularity"] is not None}
     openings = {k: v["opening_showings"] for k, v in buzz_in.items() if v["opening_showings"] is not None}
     for item, run, days in base:

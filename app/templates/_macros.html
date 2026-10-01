@@ -87,7 +87,7 @@
 
 {% macro note(i, lead) %}{% if lead == 'screen' and i.big_screen_note %}{{ i.big_screen_note }}{% elif i.why %}{{ i.why }}{% else %}{{ i.big_screen_note }}{% endif %}{% endmacro %}
 
-{% macro buzz_line(i) %}{% set b = i.buzz or {} %}{% set bits = [] %}{% if b.get('lists') %}{% set _ = bits.append('on ' ~ '{:,}'.format(b.lists) ~ ' Letterboxd lists') %}{% endif %}{% if b.get('watched') and not i.community %}{% set _ = bits.append('seen early by ' ~ '{:,}'.format(b.watched)) %}{% endif %}{% if b.get('opening_showings') %}{% set _ = bits.append(b.opening_showings ~ ' showings in its opening week here') %}{% endif %}{{ bits|join(', ') }}{% endmacro %}
+{% macro buzz_line(i) %}{% set b = i.buzz or {} %}{% set bits = [] %}{% if b.get('tmdb_popularity') %}{% set _ = bits.append('TMDB popularity ' ~ ('%.0f'|format(b.tmdb_popularity))) %}{% endif %}{% if b.get('opening_showings') %}{% set _ = bits.append(b.opening_showings ~ ' showings in its opening week here') %}{% endif %}{% if b.get('early_ratings') %}{% set _ = bits.append('{:,}'.format(b.early_ratings) ~ ' early Letterboxd ratings') %}{% endif %}{{ bits|join(', ') }}{% endmacro %}
 
 {% macro poster(i, note) %}
   <a class="poster" href="/film/{{ i.film_id }}">

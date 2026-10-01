@@ -212,15 +212,15 @@ def parse_stats(html: str) -> dict[str, int | None]:
 
 
 async def fetch_community(db: DB, tmdb_ids: list[int], limit: int, buzz_ids: set[int] | None = None) -> int:
-    """Letterboxd average, how many ratings it's based on, and buzz (watched / lists / likes) for films,
-    from the public film page (via letterboxd.com/tmdb/<id>)."""
+    """Letterboxd average and how many ratings it's based on, from the public film page
+    (via letterboxd.com/tmdb/<id>). The lists / watches / likes box isn't read: Letterboxd blocks automated
+    requests for it after the first, so buzz uses TMDB popularity and Vue's showings instead."""
     todo = [t for t in dict.fromkeys(tmdb_ids) if t][:limit]
     if not todo:
         return 0
     from .browser import browser_page
 
-    got = with_buzz = 0
-    stats_errors: list[str] = []
+    got = 0
     now = datetime.now()
     stamp, day = now.isoformat(timespec="seconds"), now.date().isoformat()
     pops = {r["tmdb_id"]: r["data"] for r in db.q(
@@ -237,24 +237,6 @@ async def fetch_community(db: DB, tmdb_ids: list[int], limit: int, buzz_ids: set
                         if 'twitter:data2' in html else None
                     avg, count = parse_rating(html, meta)
                     got += 1
-                    # buzz: Letterboxd's stats fragment, opened directly (fetching it from inside the film page
-                    # fails in a headless browser)
-                    slug = film_slug(page.url, html) if (buzz_ids is None or t in buzz_ids) else None
-                    if buzz_ids is not None and t not in buzz_ids:
-                        pass  # your older rated films: their rating count is enough
-                    elif slug:
-                        try:
-                            await page.goto(f"https://letterboxd.com/csi/film/{slug}/stats/",
-                                            wait_until="domcontentloaded", timeout=20000)
-                            stats = parse_stats(await page.content())
-                        except Exception as e:
-                            stats_errors.append(str(e).splitlines()[0][:160])
-                        if stats["lists"] is not None or stats["watched"] is not None:
-                            with_buzz += 1
-                        elif not stats_errors:
-                            stats_errors.append("stats page had no counts")
-                    else:
-                        stats_errors.append("couldn't find the film's Letterboxd address")
                 except Exception as e:  # missing rating, page change, or blocked - just skip
                     log.debug("community rating failed for %s: %s", t, e)
                 db.x("""INSERT OR REPLACE INTO community(tmdb_id,lb_avg,fetched_at,rating_count,watched,lists,likes)
@@ -270,7 +252,4 @@ async def fetch_community(db: DB, tmdb_ids: list[int], limit: int, buzz_ids: set
                 await asyncio.sleep(1.5)
     except Exception as e:
         log.warning("Letterboxd community ratings unavailable this run: %s", e)
-    if stats_errors and not with_buzz:
-        log.warning("Letterboxd buzz (lists, watches, likes) couldn't be read this run: %s", stats_errors[0])
-    db.set("letterboxd_buzz_last", {"films": got, "with_buzz": with_buzz, "error": stats_errors[0] if stats_errors else None})
     return got

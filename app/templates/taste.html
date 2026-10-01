@@ -84,7 +84,7 @@
   {% else %}
   <p class="lead">Not enough data yet: this needs Letterboxd rating counts for {{ bc.needed }} of your rated films, and has {{ bc.films }}. They're read about 150 a day during the refresh{% if bc.waiting %}, with {{ bc.waiting }} still to go{% endif %}.</p>
   {% endif %}
-  <p class="muted small" style="max-width:70ch">This compares finished films by how many people ended up rating them. Buzz before release is a different thing, and Last Showing has started logging it for every film at your cinema (Letterboxd lists, early watches, likes and TMDB popularity): {{ bc.logged }} film{{ 's' if bc.logged != 1 }} so far, {{ bc.logged_then_rated }} of them since rated by you. Once about 20 have been rated, this section will also say whether pre-release buzz predicts how much you'll like a film.</p>
+  <p class="muted small" style="max-width:70ch">This compares finished films by how many people ended up rating them. Buzz before release is a different thing, and Last Showing has started logging it for every film at your cinema (TMDB popularity, showings in its opening week at your cinema, and Letterboxd ratings from early screenings): {{ bc.logged }} film{{ 's' if bc.logged != 1 }} so far, {{ bc.logged_then_rated }} of them since rated by you. Once about 20 have been rated, this section will also say whether pre-release buzz predicts how much you'll like a film.</p>
 </section>
 
 {% if lb_import and (lb_import.unmatched or lb_import.tv) %}
