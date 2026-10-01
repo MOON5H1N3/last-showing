@@ -3,7 +3,7 @@
 {% block title %}Films | {{ app_name }}{% endblock %}
 {% block content %}
 <section style="padding-top:48px">
-  <h1 class="display" style="margin:0;font-size:clamp(56px,9vw,96px)">Films</h1>
+  <h1 class="display" style="margin:0;font-size:clamp(48px,7vw,72px)">Films</h1>
   <p class="muted" style="margin:12px 0 24px">Everything at Vue {{ cinema_name }} over the next three months, scored for you.</p>
   <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:center;justify-content:space-between">
     <nav class="pills" aria-label="Show">
@@ -41,7 +41,7 @@
         <form method="post" action="/match" style="display:flex;gap:8px;align-items:center">
           <input type="hidden" name="film_id" value="{{ u.film_id }}"><input type="hidden" name="next" value="{{ path }}">
           <label class="small muted" for="m{{ loop.index }}">TMDB link</label>
-          <input id="m{{ loop.index }}" name="tmdb" type="text" placeholder="themoviedb.org/movie/…" style="height:40px;background:#0A0A0A;border:1px solid var(--line2);border-radius:4px;color:var(--ink);padding:0 10px">
+          <input id="m{{ loop.index }}" name="tmdb" type="text" placeholder="themoviedb.org/movie/…" style="height:40px;background:var(--surface-sunk);border:1px solid var(--border-control);border-radius:var(--radius-sm);color:var(--ink);padding:0 10px">
           <button class="btn small">Save</button>
         </form>
       </div>

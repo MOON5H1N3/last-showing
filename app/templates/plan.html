@@ -1,6 +1,9 @@
 {% extends "base.html" %}
 {% import '_macros.html' as m with context %}
 {% block title %}{{ (mp.get('month_name') or 'Plan') }} | {{ app_name }}{% endblock %}
+{% block style %}
+.monthband{width:56px;height:6px;border-radius:3px;background:var(--velvet);margin-bottom:var(--space-3)}
+{% endblock %}
 {% block content %}
 {% set months = plan.get('months') or [] %}
 {% set is_current = (mi == 0) %}
@@ -8,15 +11,16 @@
 {% set n_tickets = (plan.get('tickets_total', s.tickets) if is_current else s.tickets) %}
 {% set left = mp.get('tickets_left', n_tickets) %}
 
-<section style="padding-top:48px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:32px;align-items:end" class="hero">
+<section style="padding-top:var(--space-8);display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-8);align-items:end" class="hero">
   <div>
     {% if months|length > 1 %}
-    <nav class="pills" aria-label="Months" style="margin-bottom:18px">
-      {% for mo in months %}<a class="pill" href="/?m={{ loop.index0 }}" {% if loop.index0 == mi %}aria-current="page"{% endif %}>{{ mo.month_name }}</a>{% endfor %}
+    <nav class="pills" aria-label="Months" style="margin-bottom:var(--space-6)">
+      {% for mo in months %}<a class="pill" href="/?m={{ loop.index0 }}" {% if loop.index0 == mi %}aria-current="page"{% endif %}>{{ mo.month_name[:3] }}</a>{% endfor %}
     </nav>
     {% endif %}
-    <h1 class="display" style="margin:0;font-size:clamp(56px,8vw,112px)">{{ name }}{% if months|length > 1 %}<a href="/?m={{ (mi + 1) % (months|length) }}" aria-label="Show {{ months[(mi + 1) % (months|length)].month_name }}" style="color:var(--amber);text-decoration:none;margin-left:12px">›</a>{% endif %}</h1>
-    <p class="muted" style="margin:16px 0 0;font-size:18px">
+    <div class="monthband" aria-hidden="true"></div>
+    <h1 class="display" style="margin:0;font-size:clamp(48px,7vw,72px);line-height:.9">{{ name }}{% if months|length > 1 %}<a href="/?m={{ (mi + 1) % (months|length) }}" aria-label="Show {{ months[(mi + 1) % (months|length)].month_name }}" style="color:var(--marquee-text);text-decoration:none;margin-left:12px">›</a>{% endif %}</h1>
+    <p class="muted" style="margin:var(--space-3) 0 0;font-size:16px;line-height:24px">
       {% if not n_tickets %}No tickets set up, so this is simply what's worth seeing and what's leaving.
       {% elif not is_current %}A forecast. Vue lists showtimes about a week ahead, so these picks firm up as {{ name }} gets closer.
       {% elif left == 0 %}All your tickets are used this month. Anything below is worth paying for.
@@ -58,7 +62,7 @@
 
 {% set w = plan.get('wants') or {} %}
 {% if w.get('total') %}
-<div class="wantsum" style="margin-top:28px">
+<div class="wantsum" style="margin-top:var(--space-6)">
   <strong>You want to see {{ w.total }} film{{ 's' if w.total != 1 }}.</strong>
   {% if not w.paid %}Your free tickets cover {{ 'it' if w.total == 1 else 'all of them' }}{% if w.later %}, apart from {{ w.later|join(', ') }}, which isn't showing yet{% endif %}.
   {% else %}Your {{ w.free_tickets }} free tickets over the next three months cover {{ w.free }}. You'd need {{ w.paid|length }} paid trip{{ 's' if w.paid|length != 1 }}: {% for x in w.paid %}<a href="/film/{{ x.film_id }}">{{ x.title }}</a> in {{ x.month_name }}{{ ', ' if not loop.last else '.' }}{% endfor %}{% if w.later %} {{ w.later|join(', ') }} isn't showing yet.{% endif %}{% endif %}
@@ -66,7 +70,7 @@
 {% endif %}
 
 {% if is_current and plan.get('warning') %}{% set w = plan.warning %}
-<div class="notice" role="alert" style="margin-top:28px">
+<div class="notice" role="alert" style="margin-top:var(--space-6)">
   <strong>{{ w.tickets_left }} ticket{{ 's' if w.tickets_left != 1 }} {{ 'expires' if w.tickets_left == 1 else 'expire' }} {% if w.days_left == 1 %}tonight{% else %}in {{ w.days_left }} days{% endif %}.</strong>
   {% if w.films %}Best showings left:{% for f in w.films %} {{ f.title }}{% if f.sessions %} ({% for t in f.sessions %}<a href="{{ t.url }}" target="_blank" rel="noopener">{{ t.start|dt('%a %d, %H:%M') }}</a>{{ ', ' if not loop.last }}{% endfor %}){% endif %}{{ ';' if not loop.last else '.' }}{% endfor %}{% endif %}
 </div>
@@ -80,36 +84,32 @@
 
 {% if mp.picks %}
 <section class="section">
-  <div class="rule"></div>
-  <h2 class="sec">{{ 'Use your tickets on' if is_current else 'Likely picks for ' ~ name }}</h2>
-  <p class="lead">{% if is_current %}In the order you need to go. Each pick weighs how much you'll probably enjoy it against whether it'll still be on next month.{% else %}Films already picked for an earlier month aren't repeated. Pin one to hold a ticket for it.{% endif %}</p>
+  <div class="sechead"><h2 class="sec">{{ 'Your ticket picks' if is_current else 'Likely picks for ' ~ name }}</h2><span class="count">{{ mp.picks|length }} of {{ n_tickets }} ticket{{ 's' if n_tickets != 1 }}</span></div>
+  <p class="lead">{% if is_current %}In the order you need to go.{% else %}A forecast: films picked for an earlier month aren't repeated.{% endif %}</p>
   <div class="grid2">{% for p in mp.picks %}{{ m.pick_card(p, mp.month, is_current, name) }}{% endfor %}</div>
 </section>
 {% endif %}
 
 {% if mp.get('paid_trips') %}
 <section class="section">
-  <div class="rule"></div>
-  <h2 class="sec">Paid trip{{ 's' if mp.paid_trips|length != 1 }} you'll need</h2>
-  <p class="lead">Films on your Want to see list that won't fit in your free tickets before they're likely to leave. {% if mp.paid_trips|length == 1 %}It's{% else %}They're{% endif %} worth paying for, or pin one to swap it with a free ticket.</p>
-  <div class="list">{% for i in mp.paid_trips %}{{ m.row(i, m.when(i, is_current), ('See by ' ~ (i.watch_by|dt('%a %d %b')) ~ '. ' if i.watch_by else '') ~ (i.why or '')) }}{% endfor %}</div>
+  <div class="sechead"><h2 class="sec">Paid trips</h2><span class="count">{{ mp.paid_trips|length }} film{{ 's' if mp.paid_trips|length != 1 }}</span></div>
+  <p class="lead">On your Want to see list, but no free ticket fits before {{ 'it' if mp.paid_trips|length == 1 else 'they' }}'re likely to leave.</p>
+  <div class="list">{% for i in mp.paid_trips %}{{ m.row(i, m.when(i, is_current), ('Go by ' ~ (i.watch_by|dt('%a %-d %b')) ~ '. ' if i.watch_by else '') ~ (i.why or '')) }}{% endfor %}</div>
 </section>
 {% endif %}
 
 {% if mp.get('worth_paying') %}
 <section class="section">
-  <div class="rule"></div>
-  <h2 class="sec">{% if not n_tickets %}Worth seeing{% else %}Worth paying for{% endif %}</h2>
-  <p class="lead">{% if not n_tickets %}The films most worth a cinema trip.{% else %}The next best new films, if you fancy paying. Star one (☆) to add it to Want to see, and it gets a ticket.{% endif %}</p>
+  <div class="sechead"><h2 class="sec">{% if not n_tickets %}Worth seeing{% else %}Worth paying for{% endif %}</h2><span class="count">{{ mp.worth_paying|length }} film{{ 's' if mp.worth_paying|length != 1 }}</span></div>
+  <p class="lead">{% if not n_tickets %}The films most worth a cinema trip.{% else %}The next best new films, if you fancy paying. Mark one Want to see and it gets a ticket.{% endif %}</p>
   <div class="list">{% for i in mp.worth_paying %}{{ m.row(i, m.when(i, is_current), m.note(i, 'screen')) }}{% endfor %}</div>
 </section>
 {% endif %}
 
 {% if mp.get('extras') %}
 <section class="section">
-  <div class="rule"></div>
   <details class="more">
-    <summary><h2 class="sec" style="display:inline">Re-releases and events</h2> <span class="muted">({{ mp.extras|length }})</span></summary>
+    <summary><h2 class="sec">Re-releases and events</h2><span class="count mono muted small">{{ mp.extras|length }}</span></summary>
     <p class="lead">Classics back on the big screen, concerts and live theatre. They don't compete with new films for your tickets unless you pin one, it's on your watchlist, or it's one you'd really love and haven't seen.</p>
     <div class="list">{% for i in mp.extras %}{{ m.row(i, m.when(i, is_current), (('You rated it ' ~ i.your_rating ~ '★') if i.your_rating else i.why or i.big_screen_note)) }}{% endfor %}</div>
   </details>
@@ -118,18 +118,16 @@
 
 {% if mp.get('at_home') %}
 <section class="section">
-  <div class="rule"></div>
-  <h2 class="sec">Catching later</h2>
-  <p class="lead">Quieter films that didn't make the cut above, and would work just as well at home. Studio films can usually be rented about six weeks after release.</p>
-  <div class="list">{% for i in mp.at_home %}{{ m.row(i, ('From ' ~ (i.home_from|dt('%b %d'))) if i.home_from else 'Later', m.note(i, 'taste')) }}{% endfor %}</div>
+  <div class="sechead"><h2 class="sec">Catching later</h2><span class="count">{{ mp.at_home|length }} film{{ 's' if mp.at_home|length != 1 }}</span></div>
+  <p class="lead">Quieter films that would work just as well at home. Studio films can usually be rented about six weeks after release.</p>
+  <div class="list">{% for i in mp.at_home %}{{ m.row(i, ('From ' ~ (i.home_from|dt('%-d %b'))) if i.home_from else 'Later', m.note(i, 'taste'), 'later') }}{% endfor %}</div>
 </section>
 {% endif %}
 
 {% if mp.get('everything') %}
 <section class="section">
-  <div class="rule"></div>
   <details class="more">
-    <summary><h2 class="sec" style="display:inline">Everything else in {{ name }}</h2> <span class="muted">({{ mp.everything|length }})</span></summary>
+    <summary><h2 class="sec">Everything else</h2><span class="count mono muted small">{{ mp.everything|length }}</span></summary>
     <p class="lead">The rest of what's showing or opening, in date order.</p>
     <div class="list">{% for i in mp.everything %}{{ m.row(i, m.when(i, is_current), m.note(i, 'taste')) }}{% endfor %}</div>
   </details>

@@ -6,6 +6,8 @@ Each month it works out which films to use your tickets on and when you need to 
 
 Not affiliated with Vue Entertainment or Monzo.
 
+The look follows the Last Showing brand guidelines: two themes (Auditorium, dark, and Matinee, light), marquee amber for the one thing that matters most, Big Shoulders Display for big moments, IBM Plex Sans for reading and IBM Plex Mono for figures.
+
 ## How it decides
 
 1. **What's on.** Every morning it reads your Vue's listings, including Vue's own coming-soon list, which runs months ahead.
@@ -15,7 +17,7 @@ Not affiliated with Vue Entertainment or Monzo.
 
 **Buzz** is shown on every film page: how many Letterboxd lists it's on, how many members have seen it early, likes, TMDB popularity, and how many showings your Vue gave its opening week, compared with everything else at your cinema. Buzz doesn't change the predicted rating. It's logged over time so that, once enough of those films are rated, the Taste page can say whether pre-release buzz predicts how much you'll like a film. It already says whether you rate big films differently from the crowd.
 
-**Early reviews** (optional) appear as a badge on new and upcoming films, e.g. "Critics ✔ Audiences ✔" or "Critics ✔ Audiences split"; hover over it for the scores. Critics are Rotten Tomatoes and Metacritic (through OMDb) and the Guardian's star rating; the audience is the Letterboxd average once at least 50 people have rated it. Like buzz, reviews are there for you to judge and never change predictions. Both critic sources need a free key in `.env`:
+**Early reviews** (optional) appear as a line of figures on new and upcoming films, e.g. "RT 92% · LB 3.9★"; hover over it for every score. Critics are Rotten Tomatoes and Metacritic (through OMDb) and the Guardian's star rating; the audience is the Letterboxd average once at least 50 people have rated it. Like buzz, reviews are there for you to judge and never change predictions. Both critic sources need a free key in `.env`:
 
 - `OMDB_API_KEY`: at [omdbapi.com](https://www.omdbapi.com/apikey.aspx), choose FREE (1,000 requests a day), and click the activation link in the email.
 - `GUARDIAN_API_KEY`: at [open-platform.theguardian.com](https://open-platform.theguardian.com/access/), choose "Register for a developer key".
@@ -30,7 +32,7 @@ Ticket tracking works in two ways. It's automatic: a film you log in your Letter
 Make an account at [themoviedb.org](https://www.themoviedb.org/signup), then go to **Settings → API** and request a developer key. Copy the **API Key**; the longer **API Read Access Token** works too.
 
 ### 2. Make the Discord bot
-1. Go to the [Discord developer portal](https://discord.com/developers/applications) and choose **New Application**. Call it Last Showing.
+1. Go to the [Discord developer portal](https://discord.com/developers/applications) and choose **New Application**. Call it Last Showing, and on **General Information** upload `app/static/discord-avatar.png` as the app icon.
 2. Open **Bot**, choose **Reset Token**, and copy the token. That's `DISCORD_BOT_TOKEN`.
 3. Open **OAuth2 → URL Generator**. Tick `bot` and `applications.commands`, open the generated link, and add the bot to a server you're in. Your own private server is fine. The bot needs to share a server with you to be allowed to DM you.
 4. In Discord, turn on **Settings → Advanced → Developer Mode**. Then right-click your own name and choose **Copy User ID**. That's `DISCORD_USER_ID`.
@@ -67,7 +69,7 @@ Re-upload an export every few months to pick up old ratings you've changed. New 
 | **Taste** | What it's learned about you, and how accurate it is on films it hadn't seen |
 | **Settings** | Tickets, cinema, recommendation sliders, Letterboxd, Discord, schedule, backups, and films you've ruled out |
 
-On any film: **Used a ticket**, **☆ Want to see**, **I'm seeing this** (pins it to a month you choose) and **Not for me** (never suggested again).
+On any film: **Used a ticket**, **Want to see** (the star beside a title), **I'm seeing this** (pins it to a month you choose) and **Not for me** (never suggested again).
 
 **Want to see** is how you tell Last Showing which films you're set on. It fits them into your free tickets across this month and the next two, giving tickets first to the films that will leave soonest so as many as possible fit. Any that can't fit before they're likely to leave become **paid trips**, in the month you'd need to go, and the top of the Plan page says how many you'd need. Free tickets left over go to the best recommendations. The same buttons come with the monthly Discord DM, and `/picks`, `/used`, `/undo` and `/refresh` work in your DMs with the bot.
 
@@ -78,6 +80,7 @@ Everything except secrets is on the Settings page and takes effect when you save
 - **Tickets:** Monzo Perks (1 a month), Custom (any number, e.g. 2 if you have a spare), or No tickets. Also expiry (end of month or roll over one month), and showings your tickets don't cover (EPIC, 3D, Ultra Lux).
 - **Cinema:** any Vue in the UK.
 - **Recommendations:** best film first vs never miss anything, big screen vs fine at home, how hard to chase likely favourites, watchlist boost, and whether to include events, re-releases and films you've seen.
+- **Appearance:** follow your device, or always Auditorium (dark) or Matinee (light).
 - **Letterboxd, Discord, schedule and data.**
 
 `.env` holds the secrets (TMDB key, Discord token and user ID, dashboard password) and first-run defaults. Change `.env` only for secrets, then run `docker compose up -d`.

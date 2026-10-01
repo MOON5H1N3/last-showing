@@ -1,16 +1,16 @@
 {% extends "base.html" %}
 {% block title %}Taste | {{ app_name }}{% endblock %}
 {% block style %}
-.boxes{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:20px}
-.box{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:20px 22px}
-.box h3{margin:0 0 12px;font-family:var(--display);font-weight:800;font-size:22px;letter-spacing:.04em;text-transform:uppercase}
+.boxes{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:var(--space-4)}
+.box{background:var(--surface-raised);border:1px solid var(--hairline);border-radius:var(--radius-md);padding:var(--space-4)}
+.box h3{margin:0 0 var(--space-3);font:600 11px/16px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-muted)}
 .box ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
 .box li span{color:var(--muted);font-size:14px}
 {% endblock %}
 {% block content %}
 {% set md = plan.get('model') or {} %}
 <section style="padding-top:48px">
-  <h1 class="display" style="margin:0;font-size:clamp(56px,9vw,96px)">Your taste</h1>
+  <h1 class="display" style="margin:0;font-size:clamp(48px,7vw,72px)">Your taste</h1>
   {% if md.ratings %}
   <p class="muted" style="margin:12px 0 0;max-width:70ch">Learned from {{ md.ratings }} of your Letterboxd ratings, averaging {{ md.average }}★. {% if md.favourites %}{{ md.favourites }} are favourites (4.5★ or more), about {{ '%.0f'|format(md.favourite_rate * 100) }}% of what you rate.{% endif %} A lean only shows when it's at least 0.3★ from your average.</p>
   {% else %}

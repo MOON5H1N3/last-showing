@@ -18,8 +18,7 @@ from . import tickets
 from .jobs import Engine
 
 log = logging.getLogger(__name__)
-PINK = 0xFFB020  # amber, to match the dashboard
-AMBER = 0xE0A030
+VELVET = 0xA32A3C  # the brand's identity colour: the embed edge
 
 
 def _d(v: str | None, fmt: str = "%a %-d %b") -> str:
@@ -39,65 +38,46 @@ def _everywhere(cmd):
     return cmd
 
 
+def _line(i: dict, tail: str) -> str:
+    return f"**{i['title']}** · {i['predicted']:.1f}★ · {tail}"
+
+
 def plan_embeds(plan: dict, dashboard_url: str) -> list[discord.Embed]:
+    """The monthly DM: the decision first, then one line per film (brand guide, Discord DM)."""
     left = plan.get("tickets_left", 0)
-    month = plan.get("month_label", "")
-    head = discord.Embed(title=f"Last Showing: your {month} plan", color=PINK, url=dashboard_url or None)
-    if left:
-        head.description = (f"**{left} ticket{'s' if left != 1 else ''}** to use by **{_d(plan.get('month_end'))}**. "
-                            "Picks are ordered by when you need to go.")
-    else:
-        head.description = "All your tickets are used this month. Anything below is worth paying for."
+    month = (plan.get("month_label") or "").split(" ")[0]
     m0 = (plan.get("months") or [{}])[0]
+    picks = plan.get("picks") or []
+    paid = m0.get("paid_trips") or []
+    worth = [i for i in (m0.get("worth_paying") or []) if i["film_id"] not in {p["film_id"] for p in picks}][:2]
+    home = (m0.get("at_home") or [])[:1]
+    e = discord.Embed(title=f"Your {month} plan", color=VELVET, url=dashboard_url or None)
+
+    n_films = len(picks) + len(paid) + len(worth)
+    if left:
+        first = min((p["watch_by"] for p in picks if p.get("watch_by")), default=None)
+        e.description = (f"{left} ticket{'s' if left != 1 else ''}, {n_films} film{'s' if n_films != 1 else ''} worth it."
+                         + (f" Use one by {_d(first)}." if first else ""))
+    else:
+        e.description = (f"Your tickets are used this month. {len(worth)} more worth paying for."
+                         if worth else "Your tickets are used this month.")
+
+    lines = [_line(p, f"go by {_d(p.get('watch_by'))}") for p in picks]
+    lines += [_line(p, f"paid trip, go by {_d(p.get('watch_by'))}") for p in paid]
+    lines += [_line(i, "worth paying for") for i in worth]
+    lines += [_line(i, "Catching later") for i in home]
+    if lines:
+        e.add_field(name="\u200b", value="\n".join(lines)[:1024], inline=False)
     wants = plan.get("wants") or {}
     if wants.get("paid"):
-        head.add_field(name=f"Want to see: {len(wants['paid'])} paid trip{'s' if len(wants['paid']) != 1 else ''} needed",
-                       inline=False, value="\n".join(f"• **{x['title']}** in {x['month_name']}" for x in wants["paid"][:5])
-                       + f"\nYour free tickets cover {wants['free']} of the {wants['total']} films you want to see.")
-    worth = m0.get("worth_paying") or []
-    if worth:
-        head.add_field(name="Worth paying for", inline=False,
-                       value="\n".join(f"• **{i['title']}** {i['predicted']:.1f}★"
-                                       + (f". {i['big_screen_note']}" if i.get("big_screen_note") else "")
-                                       for i in worth[:4]))
-    home = m0.get("at_home") or []
-    if home:
-        head.add_field(name="Catching later (fine at home)", inline=False, value="\n".join(
-            f"• {i['title']} {i['predicted']:.1f}★" + (f", likely to rent from {_d(i['home_from'])}" if i.get("home_from") else "")
-            for i in home[:3]))
-    shown = {i["film_id"] for i in worth}
-    leaving = [i for i in plan.get("leaving_soon") or [] if i["film_id"] not in shown]
-    if leaving:
-        head.add_field(name="Leaving soon", inline=False, value="\n".join(
-            f"• **{i['title']}** {i['predicted']:.1f}★, likely gone by {_d(i['est_end'])}" for i in leaving[:3]))
-    for m in (plan.get("months") or [])[1:3]:
-        if m.get("picks"):
-            head.add_field(name=f"Looking ahead: {m['month_name']}", inline=False, value="\n".join(
-                f"• {'📌 ' if i.get('pinned') else ''}{i['title']} {i['predicted']:.1f}★"
-                + (f", opens {_d(i['release_date'])}" if (i.get("release_date") or "") >= m["month_start"] else "")
-                for i in m["picks"][:3]))
-    if not plan.get("months") and plan.get("next_month"):
-        head.add_field(name="Opening next month", inline=False, value="\n".join(
-            f"• {i['title']} {i['predicted']:.1f}★, opens {_d(i['first_date'])}" for i in plan["next_month"][:3]))
-    embeds = [head]
-    for p in plan.get("picks", [])[:8]:
-        e = discord.Embed(title=f"{p['title']} ({p['year']})" if p.get("year") else p["title"],
-                          url=p.get("vue_url") or None, color=AMBER if p.get("p_next_month", 1) < 0.2 else PINK)
-        e.description = (f"Predicted **{p['predicted']:.1f}★** · see by **{_d(p.get('watch_by'))}**\n"
-                         f"*{p.get('end_note', '')}*")
-        if p.get("reasons"):
-            e.add_field(name="Why", value="\n".join(f"• {r}" for r in p["reasons"][:4])[:1024], inline=False)
-        if p.get("sessions"):
-            e.add_field(name="Next showings", inline=False, value="\n".join(
-                f"[{_d(t['start'], '%a %-d %b, %H:%M')}]({t['url']}){' EPIC' if 'epic' in t['formats'] else ''}"
-                for t in p["sessions"][:4])[:1024])
-        elif p.get("first_date"):
-            e.add_field(name="Showings", value=f"Opens {_d(p['first_date'])}; times usually appear the Tuesday before.",
-                        inline=False)
-        if p.get("poster"):
-            e.set_thumbnail(url=p["poster"])
-        embeds.append(e)
-    return embeds[:10]
+        e.add_field(name="Want to see", inline=False,
+                    value=f"Your free tickets cover {wants['free']} of the {wants['total']} films you want to see; "
+                          f"{len(wants['paid'])} need{'s' if len(wants['paid']) == 1 else ''} a paid trip.")
+    ahead = [m for m in (plan.get("months") or [])[1:3] if m.get("picks")]
+    if ahead:
+        e.add_field(name="Looking ahead", inline=False, value="\n".join(
+            f"{m['month_name']}: " + ", ".join(i["title"] for i in m["picks"][:3]) for m in ahead))
+    return [e]
 
 
 class PlanView(discord.ui.View):
@@ -113,9 +93,6 @@ class PlanView(discord.ui.View):
             if not p.get("pinned"):
                 self.add_item(discord.ui.Button(label="I'm seeing this", style=discord.ButtonStyle.secondary,
                                                 custom_id=f"ls:pin:{p['film_id']}"[:100], row=row))
-            if not p.get("wanted"):
-                self.add_item(discord.ui.Button(label="Want to see", style=discord.ButtonStyle.secondary,
-                                                custom_id=f"ls:want:{p['film_id']}"[:100], row=row))
             self.add_item(discord.ui.Button(label="Not for me", style=discord.ButtonStyle.secondary,
                                             custom_id=f"ls:nope:{p['film_id']}"[:100], row=row))
         if dashboard_url.startswith(("http://", "https://")):
@@ -246,7 +223,7 @@ class VueBot(discord.Client):
         self.engine.db.x("INSERT OR REPLACE INTO pins(film_id,month,created_at) VALUES(?,?,?)",
                          (film_id, month, datetime.now().isoformat(timespec="seconds")))
         self.engine.replan()
-        return f"📌 Pinned **{title}**: one of this month's tickets is kept for it."
+        return f"Pinned **{title}**: one of this month's tickets is kept for it."
 
     def _want(self, film_id: str) -> str:
         title, tid = self._film(film_id)
@@ -256,7 +233,7 @@ class VueBot(discord.Client):
         paid = len(w.get("paid") or [])
         tail = (f" You'd now need {paid} paid trip{'s' if paid != 1 else ''} to see everything you want."
                 if paid else " Your free tickets still cover everything you want to see.")
-        return f"★ **{title}** is on your Want to see list.{tail}"
+        return f"**{title}** is on your Want to see list.{tail}"
 
     def _dismiss(self, film_id: str) -> str:
         title, tid = self._film(film_id)
@@ -287,7 +264,7 @@ class VueBot(discord.Client):
         left = plan.get("tickets_left", 0)
         nxt = plan.get("picks") or []
         tail = f" Next up: **{nxt[0]['title']}**, see by {_d(nxt[0].get('watch_by'))}." if left and nxt else ""
-        return f"🎟️ Ticket used on **{title}**. {left} left this month.{tail}"
+        return f"Ticket used on **{title}**. {left} left this month.{tail}"
 
     # ---------- slash commands ----------
     def _register(self):
@@ -347,5 +324,5 @@ class VueBot(discord.Client):
                 return
             await interaction.response.defer(thinking=True)
             report = await bot.engine.refresh()
-            lines = [f"{'✅' if st['ok'] else '⚠️'} {st['step']}: {st['result']}" for st in report["steps"]]
+            lines = [f"{'OK' if st['ok'] else 'Failed'} · {st['step']}: {st['result']}" for st in report["steps"]]
             await interaction.followup.send("\n".join(lines)[:1900] or "Done.")

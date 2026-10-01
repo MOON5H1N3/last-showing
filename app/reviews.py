@@ -81,8 +81,12 @@ def verdict(rt: int | None, metascore: int | None, guardian: int | None,
         detail.append("Guardian " + "★" * guardian + "☆" * (5 - guardian))
     if lb_avg and (lb_n or 0) >= AUDIENCE_MIN_RATINGS:
         detail.append(f"Letterboxd {lb_avg:.1f}★ from {lb_n:,} ratings")
+    critics_short = (f"RT {rt}%" if rt is not None else f"Metacritic {metascore}" if metascore is not None
+                     else f"Guardian {guardian}/5" if guardian else None)
+    audience_short = f"{lb_avg:.1f}★" if audience else None
     return {"critics": critics, "audience": audience, "label": " ".join(parts), "detail": ", ".join(detail),
-            "rt": rt, "metascore": metascore, "guardian": guardian}
+            "rt": rt, "metascore": metascore, "guardian": guardian,
+            "critics_short": critics_short, "audience_short": audience_short}
 
 
 async def fetch_reviews(db: DB, omdb_key: str, guardian_key: str, films: list[dict]) -> tuple[int, int]:

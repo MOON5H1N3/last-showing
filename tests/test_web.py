@@ -44,7 +44,8 @@ class TestPages(unittest.TestCase):
             self.assertEqual(c.get(url).status_code, 200, url)
         self.assertEqual(c.get("/film/NOPE").status_code, 404)
         home = c.get("/").text
-        self.assertIn("LAST SHOWING", home)
+        self.assertIn("Last Showing", home)
+        self.assertIn("/static/favicon.svg", home)
         self.assertIn('href="/?m=1"', home)  # month switcher
         self.assertEqual(home.count('class="stub"'), 2)
 
@@ -100,3 +101,14 @@ class TestWantAndPin(unittest.TestCase):
         self.assertIn("2026-11", page)
         c.post("/pin", data={"film_id": "HO9", "month": "2026-11", "next": "/film/HO9"})
         self.assertEqual(db.one("SELECT month FROM pins WHERE film_id='HO9'")["month"], "2026-11")
+
+
+class TestTheme(unittest.TestCase):
+    def test_theme_switch(self):
+        c, s, db = client()
+        self.assertNotIn('data-theme=', c.get("/").text.split("<head>")[0])  # follows the device by default
+        c.post("/settings", data={**FORM, "theme": "light"})
+        self.assertIn('data-theme="light"', c.get("/").text)
+        c.post("/settings", data={**FORM, "theme": "system"})
+        self.assertNotIn('data-theme=', c.get("/").text.split("<head>")[0])
+        self.assertEqual(c.get("/static/app-icon.png").status_code, 200)

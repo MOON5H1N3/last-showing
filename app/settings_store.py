@@ -61,7 +61,7 @@ def save(db: DB, s: Settings, values: dict) -> list[str]:
 def from_form(form, cinemas: list[dict]) -> dict:
     """The Settings page's form fields -> setting values. Sliders arrive as 0-100."""
     v: dict = {}
-    for k in ("ticket_source", "ticket_chain", "letterboxd_user"):
+    for k in ("ticket_source", "ticket_chain", "letterboxd_user", "theme"):
         if form.get(k) is not None:
             v[k] = form.get(k)
     for k in ("tickets_per_month", "monthly_day", "monthly_hour", "refresh_hour"):

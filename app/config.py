@@ -42,6 +42,8 @@ class Settings:
     favourite_weight: float = field(default_factory=lambda: float(_env("FAVOURITE_WEIGHT", "1.0")))
     # how much more a film that suits the big screen is worth a cinema trip (0 = rank on enjoyment alone)
     big_screen_weight: float = field(default_factory=lambda: float(_env("BIG_SCREEN_WEIGHT", "0.5")))
+    # dashboard appearance: follow the device (dark Auditorium or light Matinee), or always one of them
+    theme: str = field(default_factory=lambda: _env("THEME", "system"))
     watchlist_boost: float = field(default_factory=lambda: float(_env("WATCHLIST_BOOST", "0.25")))
     include_events: bool = field(default_factory=lambda: _bool("INCLUDE_EVENTS", True))
     include_rereleases: bool = field(default_factory=lambda: _bool("INCLUDE_RERELEASES", True))
@@ -112,7 +114,7 @@ class Settings:
         "ticket_rollover": "bool", "ticket_excluded_formats": "list",
         "vue_cinema_slug": "slug", "vue_cinema_id": "text", "vue_cinema_name": "text",
         "urgency_weight": "float:0:1", "favourite_weight": "float:0:2", "watchlist_boost": "float:0:1",
-        "big_screen_weight": "float:0:1",
+        "big_screen_weight": "float:0:1", "theme": "choice:system,dark,light",
         "include_events": "bool", "include_rereleases": "bool", "include_seen": "bool",
         "letterboxd_user": "slug", "letterboxd_community": "bool",
         "monthly_day": "int:1:28", "monthly_hour": "int:0:23", "refresh_hour": "int:0:23",

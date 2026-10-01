@@ -9,7 +9,7 @@
   <div class="times">
     {% for day, group in item.sessions|groupby('day') %}{% if loop.index <= days %}
     <div class="day">
-      <span class="d">{{ day|dt('%a %d %b') }}</span>
+      <span class="d">{{ day|dt('%a %-d %b') }}</span>
       {% for t in group %}<a href="{{ t.url }}" target="_blank" rel="noopener" class="chip{{ ' sold' if t.sold_out }}" title="{{ t.screen }}{% if t.formats %} ({{ t.formats|join(', ') }}){% endif %}">{{ t.start[11:16] }}{% if 'epic' in t.formats %}<span class="fmt">EPIC</span>{% endif %}{% if '3d' in t.formats %}<span class="fmt">3D</span>{% endif %}</a>{% endfor %}
     </div>
     {% endif %}{% endfor %}
@@ -29,12 +29,11 @@
   {% endif %}
 {% endmacro %}
 
-{% macro pin_dismiss(item, month_key, small=False) %}
-  {{ want_btn(item, small) }}
+{% macro pin_dismiss(item, month_key, small=False, primary=False) %}
   {% if item.pinned and not item.wanted %}
   <form class="inline" method="post" action="/unpin"><input type="hidden" name="film_id" value="{{ item.film_id }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn{{ ' small' if small }}">Unpin</button></form>
   {% elif not item.wanted %}
-  <form class="inline" method="post" action="/pin"><input type="hidden" name="film_id" value="{{ item.film_id }}"><input type="hidden" name="month" value="{{ month_key }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn{{ ' small' if small }}">I'm seeing this</button></form>
+  <form class="inline" method="post" action="/pin"><input type="hidden" name="film_id" value="{{ item.film_id }}"><input type="hidden" name="month" value="{{ month_key }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn{{ ' main' if primary }}{{ ' small' if small }}">I'm seeing this</button></form>
   {% endif %}
   <form class="inline" method="post" action="/dismiss"><input type="hidden" name="film_id" value="{{ item.film_id }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn ghost{{ ' small' if small }}">Not for me</button></form>
 {% endmacro %}
@@ -44,50 +43,60 @@
 {% endmacro %}
 
 {% macro reasons(item, n=4) %}
-  {% if item.reasons %}<ul class="reasons">{% for r in item.reasons[:n] %}<li class="{{ 'against' if r.startswith('Against') }}">{{ r }}</li>{% endfor %}</ul>{% endif %}
+  {% if item.reasons %}<ul class="reasons">{% for r in item.reasons[:n] %}<li>{{ r }}</li>{% endfor %}</ul>{% endif %}
 {% endmacro %}
 
 {% macro fav(item) %}{% if item.fav_chance is not none and plan.model and plan.model.favourite_rate %}{{ '%.0f'|format(item.fav_chance * 100) }}% chance of a favourite (you usually {{ '%.0f'|format(plan.model.favourite_rate * 100) }}%){% endif %}{% endmacro %}
 
 {% macro confidence(c) %}{{ {'high': 'Confident guess', 'medium': 'Fair guess', 'low': 'Rough guess', 'none': 'Pure guess'}.get(c, '') }}{% endmacro %}
 
-{% macro pick_card(p, month_key, is_current, month_name) %}
-  {% set d = days_until(p.watch_by) %}
-  <article class="card{{ ' pinned' if p.pinned }}">
-    <div class="head">
-      {% if p.backdrop or p.poster %}<span class="bg" style="background-image:url('{{ p.backdrop or p.poster }}')" aria-hidden="true"></span>{% endif %}
-      <a class="pposter" href="/film/{{ p.film_id }}" {% if p.poster %}style="background-image:url('{{ p.poster }}')"{% endif %} aria-label="{{ p.title }}: film page">{% if not p.poster %}<span>{{ p.title }}</span>{% endif %}</a>
-      <div class="hinfo">
-        <div class="hmeta">{{ cert(p.cert) }}{% if p.year %}<span>{{ p.year }}</span>{% endif %}{% if p.runtime %}<span>{{ p.runtime // 60 }}h {{ '%02d'|format(p.runtime % 60) }}m</span>{% endif %}{% if p.paid_trip %}<span class="badge">Paid trip</span>{% elif p.wanted %}<span class="badge">Want to see</span>{% elif p.pinned %}<span class="badge">Pinned</span>{% elif p.kind == 'rerelease' %}<span class="badge quiet">Re-release</span>{% elif p.kind == 'event' %}<span class="badge quiet">Event</span>{% endif %}{{ review_badge(p) }}</div>
-        <h3><a href="/film/{{ p.film_id }}">{{ p.title }}</a></h3>
-        <div class="score">
-          {{ rating(p.predicted) }}
-          {% if p.watch_by %}<span class="badge{{ ' quiet' if not is_current or (d is not none and d > 7) }}">See by {{ p.watch_by|dt('%a %d %b') }}</span>{% endif %}
-        </div>
-        <span class="muted small">{{ confidence(p.confidence) }}{% if fav(p)|trim %}; {{ fav(p) }}{% endif %}</span>
-        {% if p.big_screen_note and p.big_screen_note != 'Fine at home' %}<span class="bignote">{{ p.big_screen_note }}</span>{% endif %}
-      </div>
-    </div>
-    <div class="in">
-      <p style="margin:0;color:var(--soft);font-size:15px">{% if p.p_available < 1 %}{{ '%.0f'|format(p.p_available * 100) }}% chance it's still on in {{ month_name }}. {% endif %}{{ p.end_note }}{% if p.p_next_month < 0.2 %}. Almost certainly gone the month after.{% elif p.p_next_month > 0.7 %}. Likely still on the month after.{% endif %}</p>
-      {{ reasons(p, 3) }}
-      {{ showtimes(p) }}
+{# Status always has a word, and a film carries at most two tags. ctx: where it's shown (pick, later, used). #}
+{% macro tags(i, ctx='') %}{% set t = [] %}
+{%- if ctx == 'used' %}{% set _ = t.append(('used', 'Used')) %}
+{%- elif i.paid_trip %}{% set _ = t.append(('', 'Paid trip')) %}
+{%- elif ctx == 'pick' %}{% set _ = t.append(('', 'Ticket pick')) %}
+{%- elif i.wanted %}{% set _ = t.append(('', 'Want to see')) %}
+{%- elif i.pinned %}{% set _ = t.append(('', 'Pinned')) %}{% endif %}
+{%- if i.leaving %}{% set _ = t.append(('leaving', 'Leaving soon')) %}{% elif i.short_run %}{% set _ = t.append(('leaving', 'Short run')) %}{% endif %}
+{%- if ctx == 'later' %}{% set _ = t.append(('later', 'Catching later')) %}{% endif %}
+{%- if i.kind == 'rerelease' %}{% set _ = t.append(('plain', 'Re-release')) %}{% elif i.kind == 'event' %}{% set _ = t.append(('plain', 'Event')) %}{% endif %}
+{%- if i.on_watchlist and not i.wanted %}{% set _ = t.append(('plain', 'Watchlist')) %}{% endif %}
+{%- if t %}<span class="tags">{% for cls, word in t[:2] %}<span class="tag {{ cls }}"{% if word == 'Short run' %} title="{{ '%.0f'|format((i.p_two_weeks or 0) * 100) }}% chance it's still on two weeks after it opens here"{% endif %}>{{ word }}</span>{% endfor %}</span>{% endif %}{% endmacro %}
+
+{% macro info(i) %}{% set bits = [] %}{% if i.genres %}{% set _ = bits.append(i.genres[:2]|join(', ')) %}{% endif %}{% if i.runtime %}{% set _ = bits.append((i.runtime // 60) ~ 'h ' ~ ('%02d'|format(i.runtime % 60)) ~ 'm') %}{% endif %}{% set big = i.big_screen_note if i.big_screen_note and i.big_screen_note != 'Fine at home' else '' %}{{ bits|join(' · ') }}{% if bits %}. {% endif %}{% if i.why %}{{ i.why }}. {% endif %}{% if big %}{{ big }}. {% endif %}{% if (i.buzz or {}).get('level') == 'big' %}Big buzz: {{ buzz_line(i) }}.{% endif %}{% endmacro %}
+
+{% macro figures(i, is_current, month_name) %}{% set d = days_until(i.watch_by) %}{% set r = i.reviews or {} %}
+  <div class="figs">
+    {% if i.your_rating is not none %}<span class="fig"><span class="label">You gave it</span><b>{{ i.your_rating }}★</b></span>
+    {% else %}<span class="fig"><span class="label">For you</span><b title="{{ confidence(i.confidence) }}{% if fav(i)|trim %}; {{ fav(i) }}{% endif %}">{{ '%.1f'|format(i.predicted or 0) }}★</b></span>{% endif %}
+    {% if is_current %}{% if i.chances and i.chances.get('7') is not none %}<span class="fig"><span class="label">On in a week</span><b>{{ '%.0f'|format(i.chances['7'] * 100) }}%</b></span>{% endif %}
+    {% else %}<span class="fig"><span class="label">On in {{ month_name }}</span><b>{{ '%.0f'|format((i.p_available or 0) * 100) }}%</b></span>{% endif %}
+    {% if i.watch_by %}<span class="fig"><span class="label">Go by</span><b class="{{ 'urgent' if is_current and d is not none and d <= 7 }}">{{ i.watch_by|dt('%a %-d %b') }}</b></span>{% endif %}
+    {% if r.get('critics_short') or r.get('audience_short') %}<span class="fig"><span class="label">Reviews</span><b title="{{ r.detail }}">{{ r.critics_short or '' }}{% if r.critics_short and r.audience_short %} · {% endif %}{% if r.audience_short %}LB {{ r.audience_short }}{% endif %}</b></span>{% endif %}
+  </div>
+{% endmacro %}
+
+{% macro pick_card(p, month_key, is_current, month_name, ctx='pick') %}
+  <article class="card fcard">
+    <a class="fposter" href="/film/{{ p.film_id }}" {% if p.poster %}style="background-image:url('{{ p.poster }}')"{% endif %} aria-label="{{ p.title }}: film page"></a>
+    <div class="fbody">
+      {{ tags(p, ctx) }}
+      <div class="ftitlerow"><h3 class="ftitle"><a href="/film/{{ p.film_id }}">{{ p.title }}</a></h3>{{ want_star(p) }}</div>
+      <p class="finfo">{{ info(p) }}</p>
+      {{ figures(p, is_current, month_name) }}
+      {{ showtimes(p, 2) }}
       <div class="actions">
-        {% if is_current and plan.tickets_total %}<form class="inline" method="post" action="/use"><input type="hidden" name="film_id" value="{{ p.film_id }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn main">Used a ticket on this</button></form>{% endif %}
-        {{ pin_dismiss(p, month_key) }}
-        {{ links(p) }}
+        {% set can_use = is_current and plan.tickets_total %}
+        {% if can_use %}<form class="inline" method="post" action="/use"><input type="hidden" name="film_id" value="{{ p.film_id }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn main">Used a ticket</button></form>{% endif %}
+        {{ pin_dismiss(p, month_key, primary=not can_use) }}
       </div>
     </div>
   </article>
 {% endmacro %}
 
-{% macro flags(i) %}{# one badge at most: the most useful thing to know #}{% if i.paid_trip %} <span class="badge">Paid trip</span>{% elif i.wanted %} <span class="badge">Want to see</span>{% elif i.pinned %} <span class="badge">Pinned</span>{% elif i.leaving %} <span class="badge">Leaving soon</span>{% elif i.short_run %} <span class="badge" title="{{ '%.0f'|format((i.p_two_weeks or 0) * 100) }}% chance it's still on two weeks after it opens here">Short run</span>{% elif i.on_watchlist %} <span class="badge quiet">Watchlist</span>{% elif (i.buzz or {}).get('level') == 'big' %} <span class="badge quiet" title="{{ buzz_line(i) }}">Big buzz</span>{% endif %}{% endmacro %}
+{% macro when(i, is_current) %}{% if i.opens_in_month and i.release_date %}{{ i.release_date|dt('%a %-d %b') }}{% elif i.sessions %}{{ i.sessions[0].start|dt('%a %-d %b') }}{% elif is_current %}Now{% else %}Still on{% endif %}{% endmacro %}
 
-{% macro when(i, is_current) %}{% if i.opens_in_month and i.release_date %}{{ i.release_date|dt('%a %d') }}{% elif i.sessions %}{{ i.sessions[0].start|dt('%a %d') }}{% elif is_current %}Now{% else %}Still on{% endif %}{% endmacro %}
-
-{% macro note(i, lead) %}{% if lead == 'screen' and i.big_screen_note %}{{ i.big_screen_note }}{% elif i.why %}{{ i.why }}{% else %}{{ i.big_screen_note }}{% endif %}{% endmacro %}
-
-{% macro review_badge(i) %}{% set r = i.reviews or {} %}{% if r.get('label') %} <span class="badge rev{{ ' good' if r.critics != 'poor' and r.audience != 'poor' and 'good' in [r.critics, r.audience] else '' }}" title="{{ r.detail }}">{{ r.label }}</span>{% endif %}{% endmacro %}
+{% macro note(i, lead) %}{% if lead == 'screen' and i.big_screen_note and i.big_screen_note != 'Fine at home' %}{{ i.big_screen_note }}{% elif i.why %}{{ i.why }}{% elif i.big_screen_note != 'Fine at home' %}{{ i.big_screen_note }}{% endif %}{% set r = i.reviews or {} %}{% if r.get('critics_short') or r.get('audience_short') %}<span class="mono"> · {% if r.critics_short %}{{ r.critics_short }}{% endif %}{% if r.critics_short and r.audience_short %} · {% endif %}{% if r.audience_short %}LB {{ r.audience_short }}{% endif %}</span>{% endif %}{% endmacro %}
 
 {% macro buzz_line(i) %}{% set b = i.buzz or {} %}{% set bits = [] %}{% if b.get('tmdb_popularity') %}{% set _ = bits.append('TMDB popularity ' ~ ('%.0f'|format(b.tmdb_popularity))) %}{% endif %}{% if b.get('opening_showings') %}{% set _ = bits.append(b.opening_showings ~ ' showings in its opening week here') %}{% endif %}{% if b.get('early_ratings') %}{% set _ = bits.append('{:,}'.format(b.early_ratings) ~ ' early Letterboxd ratings') %}{% endif %}{{ bits|join(', ') }}{% endmacro %}
 
@@ -99,11 +108,17 @@
   </a>
 {% endmacro %}
 
-{% macro row(i, when, note) %}
+{% macro want_star(i) %}<form class="inline" method="post" action="{{ '/unwant' if i.wanted else '/want' }}"><input type="hidden" name="film_id" value="{{ i.film_id }}"><input type="hidden" name="next" value="{{ path }}"><button class="wantstar{{ ' on' if i.wanted }}" title="{{ 'On your Want to see list' if i.wanted else 'Want to see' }}" aria-label="{{ 'Remove from' if i.wanted else 'Add to' }} Want to see: {{ i.title }}" aria-pressed="{{ 'true' if i.wanted else 'false' }}">{{ '★' if i.wanted else '☆' }}</button></form>{% endmacro %}
+
+{% macro row(i, when, note, ctx='') %}
   <div class="lrow">
     <span class="when">{{ when }}</span>
     <a class="thumb" href="/film/{{ i.film_id }}" tabindex="-1" aria-hidden="true" {% if i.poster %}style="background-image:url('{{ i.poster }}')"{% endif %}></a>
-    <div><div class="t"><a href="/film/{{ i.film_id }}">{{ i.title }}</a>{{ flags(i) }}{{ review_badge(i) }}</div><div class="m">{{ note }}</div></div>
-    <span class="r"><form class="inline" method="post" action="{{ '/unwant' if i.wanted else '/want' }}"><input type="hidden" name="film_id" value="{{ i.film_id }}"><input type="hidden" name="next" value="{{ path }}"><button class="wantstar{{ ' on' if i.wanted }}" title="{{ 'On your Want to see list' if i.wanted else 'Want to see' }}" aria-label="{{ 'Remove from' if i.wanted else 'Add to' }} Want to see: {{ i.title }}" aria-pressed="{{ 'true' if i.wanted else 'false' }}">{{ '★' if i.wanted else '☆' }}</button></form>{{ '%.1f'|format(i.predicted or 0) }}<span class="st">★</span></span>
+    <div><div class="t"><a href="/film/{{ i.film_id }}">{{ i.title }}</a>{{ tags(i, ctx) }}</div><div class="m">{{ note }}</div></div>
+    <span class="r">{{ want_star(i) }}{{ '%.1f'|format(i.predicted or 0) }}<span class="st">★</span></span>
   </div>
 {% endmacro %}
+
+{# kept for older templates: the reviews verdict is now shown as figures, not a badge #}
+{% macro review_badge(i) %}{% endmacro %}
+{% macro flags(i) %}{{ tags(i) }}{% endmacro %}

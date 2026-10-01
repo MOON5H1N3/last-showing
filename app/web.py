@@ -16,7 +16,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import (FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse,
                                  Response)
-from starlette.routing import Route
+from starlette.routing import Mount, Route
+from starlette.staticfiles import StaticFiles
 
 from . import settings_store, tickets
 from .jobs import Engine
@@ -332,6 +333,7 @@ def create_app(engine: Engine, bot=None) -> Starlette:
         return PlainTextResponse("ok")
 
     routes = [
+        Mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static"),
         Route("/", plan_page),
         Route("/films", films_page),
         Route("/film/{film_id}", film_page),

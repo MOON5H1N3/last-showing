@@ -2,49 +2,39 @@
 {% import '_macros.html' as m with context %}
 {% block title %}{{ f.title }} | {{ app_name }}{% endblock %}
 {% block style %}
-.filmhero{padding-top:40px;display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:40px;align-items:start}
-.bar{height:10px;background:#222;border-radius:5px}.bar>span{display:block;height:100%;background:var(--amber);border-radius:5px}
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
-.stats>div{background:var(--panel,#141414);border:1px solid #262626;border-radius:6px;padding:14px 16px}
-.stats b{display:block;font-size:26px;line-height:1.1;margin-bottom:4px}
+.filmhero{padding-top:var(--space-8);display:grid;grid-template-columns:240px minmax(0,1fr);gap:var(--space-8);align-items:start}
+.hposter{position:relative;display:block;aspect-ratio:2/3;border-radius:var(--radius-md);background:var(--surface-sunk) center/cover no-repeat}
+.still{aspect-ratio:16/9;max-width:720px;border-radius:var(--radius-md);background:var(--surface-sunk) center/cover no-repeat;margin-top:var(--space-8)}
+.filmtitle{margin:0;font:600 40px/46px var(--sans);letter-spacing:-.01em}
+.bar{height:8px;background:var(--surface-sunk);border-radius:var(--radius-pill)}.bar>span{display:block;height:100%;background:var(--ink-muted);border-radius:var(--radius-pill)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:var(--space-3)}
+.stats>div{background:var(--surface-raised);border:1px solid var(--hairline);border-radius:var(--radius-md);padding:var(--space-3) var(--space-4)}
+.stats b{display:block;font:500 22px/1.2 var(--mono);margin-bottom:4px}
 .pinmonths{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap}
 .why{display:grid;grid-template-columns:76px minmax(0,1fr);gap:8px 12px}
-@media (max-width:820px){.filmhero{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:820px){.filmhero{grid-template-columns:120px minmax(0,1fr);gap:var(--space-4)}.filmtitle{font-size:26px;line-height:32px}}
 {% endblock %}
 {% block content %}
 {% set month_key = current_month %}
 <section class="filmhero">
-  <div class="still" style="border-radius:6px;overflow:hidden;{% if f.backdrop %}background-image:url('{{ f.backdrop }}'){% endif %}">
-    {% if not f.backdrop and f.poster %}
-    <span style="position:absolute;inset:-30px;background:url('{{ f.poster }}') center/cover;filter:blur(24px) brightness(.35)" aria-hidden="true"></span>
-    <span style="position:absolute;top:6%;bottom:6%;left:50%;transform:translateX(-50%);aspect-ratio:2/3;background:url('{{ f.poster }}') center/cover;border-radius:4px;box-shadow:0 12px 32px rgba(0,0,0,.6)" aria-hidden="true"></span>
-    {% endif %}
-    {% if f.trailer %}
-    <a href="{{ f.trailer }}" target="_blank" rel="noopener" aria-label="Watch the trailer on YouTube" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-decoration:none">
-      <span style="width:84px;height:84px;border-radius:50%;border:2px solid var(--amber);background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center">
-        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#FFB020" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M8 5l11 7-11 7z"></path></svg>
-      </span>
-    </a>
-    {% endif %}
-  </div>
-  <div style="display:flex;flex-direction:column;gap:16px">
+  <a class="hposter" {% if f.trailer %}href="{{ f.trailer }}" target="_blank" rel="noopener" title="Watch the trailer on YouTube"{% endif %} {% if f.poster %}style="background-image:url('{{ f.poster }}')"{% endif %} aria-label="{{ f.title }} poster{{ ', watch the trailer' if f.trailer }}"></a>
+  <div style="display:flex;flex-direction:column;gap:var(--space-4)">
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap" class="muted">
       {{ m.cert(f.cert) }}
       {% if f.year %}<span>{{ f.year }}</span>{% endif %}
       {% if f.runtime %}<span>{{ f.runtime // 60 }}h {{ '%02d'|format(f.runtime % 60) }}m</span>{% endif %}
       {% if f.genres %}<span>{{ f.genres|join(', ') }}</span>{% endif %}
-      {% if f.kind == 'rerelease' %}<span class="badge quiet">Re-release</span>{% elif f.kind == 'event' %}<span class="badge quiet">Event</span>{% endif %}
+      {{ m.tags(f) }}
     </div>
-    <h1 class="display" style="margin:0;font-size:clamp(48px,7vw,88px)">{{ f.title }}</h1>
-    {% if f.overview %}<p style="margin:0;color:var(--soft);max-width:52ch">{{ f.overview }}</p>{% endif %}
-    <div class="card" style="padding:18px 20px;display:flex;align-items:center;gap:20px">
+    <h1 class="filmtitle">{{ f.title }}</h1>
+    {% if f.overview %}<p style="margin:0;color:var(--ink-muted);max-width:68ch">{{ f.overview }}</p>{% endif %}
+    <div class="card" style="padding:var(--space-4);display:flex;align-items:center;gap:var(--space-4);max-width:480px">
       {{ m.rating(f.predicted) }}
       <div><div style="font-weight:600">{% if f.your_rating is not none %}You rated it {{ f.your_rating }}★{% else %}Your predicted rating{% endif %}</div>
         <div class="muted small">{{ m.confidence(f.confidence) }}.{% if m.fav(f)|trim %} {{ m.fav(f) }}.{% endif %}</div></div>
     </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap">
-      {% if plan.tickets_total %}<form class="inline" method="post" action="/use"><input type="hidden" name="film_id" value="{{ f.film_id }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn main">Used a ticket on this</button></form>{% endif %}
-      {{ m.want_btn(f) }}
+      {% if plan.tickets_total %}<form class="inline" method="post" action="/use"><input type="hidden" name="film_id" value="{{ f.film_id }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn main">Used a ticket</button></form>{% endif %}
       {% if pinned_month %}
       <form class="inline" method="post" action="/unpin"><input type="hidden" name="film_id" value="{{ f.film_id }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn">Unpin ({{ (pinned_month ~ '-01')|dt('%B') }})</button></form>
       {% elif pin_months|length == 1 %}
@@ -56,16 +46,18 @@
         {% for key, name in pin_months %}<button class="btn small" name="month" value="{{ key }}">{{ name }}</button>{% endfor %}
       </form>
       {% endif %}
+      {{ m.want_btn(f) }}
       <form class="inline" method="post" action="/dismiss"><input type="hidden" name="film_id" value="{{ f.film_id }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn ghost">Not for me</button></form>
     </div>
     {{ m.links(f) }}
   </div>
 </section>
 
+{% if f.backdrop %}<div class="still" style="background-image:url('{{ f.backdrop }}')" role="img" aria-label="A still from {{ f.title }}"></div>{% endif %}
+
 <section class="section grid2" style="gap:40px">
   <div>
-    <div class="rule"></div>
-    <h2 class="sec" style="font-size:34px;margin-bottom:18px">Why it suits you</h2>
+        <div class="sechead"><h2 class="sec">Why it suits you</h2></div>
     {% if f.reasons %}
     <div class="why">
       {% for r in f.reasons %}
@@ -77,8 +69,7 @@
     {% else %}<p class="muted">Not enough of your ratings overlap with this film to say much yet.</p>{% endif %}
   </div>
   <div>
-    <div class="rule"></div>
-    <h2 class="sec" style="font-size:34px;margin-bottom:6px">How long it'll be on</h2>
+        <div class="sechead"><h2 class="sec">How long it'll be on</h2></div>
     <p class="muted small" style="margin:0 0 18px">{{ f.end_note }}.{% if f.short_run %} <strong style="color:var(--amber)">Likely a short run: go in its first week.</strong>{% endif %}</p>
     {% for d, label in [('7', 'Still on in a week'), ('14', 'Still on in two weeks'), ('30', 'Still on in a month')] %}
       {% set pc = (f.chances.get(d, 0) * 100)|round|int %}
@@ -93,8 +84,7 @@
 {% set b = f.buzz or {} %}
 {% if b %}
 <section class="section">
-  <div class="rule"></div>
-  <h2 class="sec" style="font-size:34px;margin-bottom:6px">Buzz</h2>
+    <div class="sechead"><h2 class="sec">Buzz</h2></div>
   <p class="muted small" style="margin:0 0 18px">{{ {'big': 'More attention than most films at your cinema right now', 'some': 'About as much attention as a typical film at your cinema', 'quiet': 'Less attention than most films at your cinema'}[b.level] }}. Buzz doesn't change the predicted rating; it's here so a big release is never a surprise.</p>
   <div class="stats">
     {% if b.get('tmdb_popularity') %}<div><b>{{ '%.0f'|format(b.tmdb_popularity) }}</b><span class="muted small">TMDB popularity (people looking it up)</span></div>{% endif %}
@@ -105,8 +95,7 @@
 {% endif %}
 
 <section class="section">
-  <div class="rule"></div>
-  <h2 class="sec" style="font-size:34px;margin-bottom:18px">Showtimes</h2>
+    <div class="sechead"><h2 class="sec">Showtimes</h2></div>
   {{ m.showtimes(f, 14) }}
   <p class="faint small" style="margin:18px 0 0">Times open Vue's booking page. Vue adds new showtimes each Tuesday for the week from Friday.</p>
 </section>

@@ -33,7 +33,7 @@ class TestAlerts(unittest.TestCase):
         db = DB(":memory:")
         msgs = alerts.assess(db, report(TMDB_metadata="TMDB refused the key in TMDB_API_KEY"))
         self.assertEqual(len(msgs), 1)
-        self.assertIn("🔑", msgs[0])
+        self.assertIn("Key problem", msgs[0])
         self.assertIn("force-recreate", msgs[0])
         self.assertEqual(alerts.assess(db, report(TMDB_metadata="TMDB refused the key in TMDB_API_KEY")), [])
 
