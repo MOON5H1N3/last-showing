@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+{% block title %}Settings | {{ app_name }}{% endblock %}
+{% block style %}
+.setgrid{padding-top:40px;display:grid;grid-template-columns:220px minmax(0,1fr);gap:48px;align-items:start}
+.sidenav{position:sticky;top:24px;display:flex;flex-direction:column;gap:4px;font-size:15px}
+.sidenav a{color:var(--soft);text-decoration:none;padding:8px 12px;border-left:3px solid transparent}
+.sidenav a:hover{color:var(--amber);border-left-color:var(--amber)}
+.scard{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:24px 26px;display:flex;flex-direction:column;gap:22px;scroll-margin-top:24px}
+.scard h2{margin:0;font-family:var(--display);font-weight:800;font-size:30px;letter-spacing:.03em;text-transform:uppercase}
+.srow{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:24px;align-items:center}
+.lab{font-weight:600}
+.help{color:var(--muted);font-size:14px;margin-top:2px}
+.field{height:44px;background:#0A0A0A;border:1px solid var(--line2);border-radius:4px;color:var(--ink);font:15px Barlow,sans-serif;padding:0 12px;width:100%}
+.seg{display:inline-flex;flex-wrap:wrap;border:1px solid var(--line2);border-radius:999px;overflow:hidden;justify-self:start}
+.seg input{position:absolute;opacity:0;width:1px;height:1px}
+.seg label{min-height:40px;display:flex;align-items:center;padding:0 16px;color:var(--soft);font-weight:600;font-size:14px;cursor:pointer}
+.seg input:checked+label{background:var(--amber);color:#000}
+.seg input:focus-visible+label{outline:3px solid var(--amber);outline-offset:-3px}
+.tog{display:flex;align-items:center;gap:10px}
+.tog input,.fmtbox input{width:20px;height:20px;accent-color:var(--amber)}
+.fmtbox{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--line2);border-radius:4px;font-size:14px}
+input[type=range]{width:100%;accent-color:var(--amber)}
+.ends{display:flex;justify-content:space-between;color:var(--muted);font-size:13px}
+.mini{width:62px;height:40px;background:var(--amber);color:#000;border-radius:4px;display:flex;align-items:center;justify-content:center;font-family:var(--display);font-weight:800;font-size:13px;letter-spacing:.06em}
+.savebar{position:sticky;bottom:0;padding:16px 0 28px;background:#000;display:flex;align-items:center;gap:16px;border-top:1px solid #222}
+.later{font-size:12px;font-weight:600;color:#000;background:var(--muted);border-radius:999px;padding:2px 8px;margin-left:8px}
+@media (max-width:820px){.setgrid{grid-template-columns:minmax(0,1fr)}.sidenav{display:none}.srow{grid-template-columns:minmax(0,1fr);gap:10px}.savebar{bottom:64px}}
+{% endblock %}
+{% block content %}
+<div class="setgrid">
+<nav class="sidenav" aria-label="Settings sections">
+  <a href="#tickets">Tickets</a><a href="#cinema">Cinema</a><a href="#recs">Recommendations</a><a href="#letterboxd">Letterboxd</a><a href="#discord">Discord</a><a href="#data">Schedule and data</a><a href="#notforme">Not for me</a>
+</nav>
+
+<div style="display:flex;flex-direction:column;gap:28px">
+<div>
+  <h1 class="display" style="margin:0;font-size:72px">Settings</h1>
+  <p class="muted" style="margin:8px 0 0">Changes apply to the plan as soon as you save. Secrets like the Discord bot token stay in the .env file.</p>
+</div>
+
+<form id="settings" method="post" action="/settings" style="display:flex;flex-direction:column;gap:28px">
+<input type="hidden" name="next" value="/settings">
+
+<section id="tickets" class="scard">
+  <div><div class="rule"></div><h2>Tickets</h2></div>
+  <div class="srow">
+    <div><div class="lab" id="src-l">Where your tickets come from</div><div class="help">Monzo Perks gives one Vue ticket a month. Pick Custom if you have more, like a spare from someone else.</div></div>
+    <div class="seg" role="radiogroup" aria-labelledby="src-l">
+      {% for v, label in [('monzo', 'Monzo Perks'), ('custom', 'Custom'), ('none', 'No tickets')] %}
+      <input type="radio" id="src-{{ v }}" name="ticket_source" value="{{ v }}" {% if s.ticket_source == v %}checked{% endif %}><label for="src-{{ v }}">{{ label }}</label>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="srow">
+    <div><label class="lab" for="tpm">Tickets per month</label><div class="help">Your plan page shows one ticket stub for each.</div></div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <button class="btn" type="button" data-step="-1" aria-label="One fewer ticket" style="width:44px;padding:0;font-size:22px">−</button>
+      <input id="tpm" name="tickets_per_month" type="number" min="0" max="10" value="{{ s.tickets_per_month }}" class="field" style="width:72px;text-align:center;font-family:var(--display);font-weight:800;font-size:28px">
+      <button class="btn" type="button" data-step="1" aria-label="One more ticket" style="width:44px;padding:0;font-size:22px">+</button>
+      <div id="stubpreview" style="display:flex;gap:6px;flex-wrap:wrap;margin-left:8px" aria-hidden="true">{% for i in range(s.tickets) %}<span class="mini">ADMIT 1</span>{% endfor %}</div>
+    </div>
+  </div>
+  <div class="srow">
+    <div><label class="lab" for="chain">Valid at</label><div class="help">Tickets are only planned for this chain's cinemas.</div></div>
+    <select id="chain" name="ticket_chain" class="field"><option value="vue" selected>Vue</option></select>
+  </div>
+  <div class="srow">
+    <div class="lab" id="exp-l">When they run out</div>
+    <div class="seg" role="radiogroup" aria-labelledby="exp-l">
+      <input type="radio" id="exp-month" name="ticket_expiry" value="month" {% if not s.ticket_rollover %}checked{% endif %}><label for="exp-month">End of each month</label>
+      <input type="radio" id="exp-roll" name="ticket_expiry" value="rollover" {% if s.ticket_rollover %}checked{% endif %}><label for="exp-roll">Roll over one month</label>
+    </div>
+  </div>
+  <div class="srow" style="align-items:start">
+    <div><div class="lab">Showings they don't cover</div><div class="help">Tick any your tickets can't be used for. Those showings are left out of your picks.</div></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      {% for v, label in [('epic', 'EPIC'), ('3d', '3D'), ('ultra-lux-and-lux', 'Ultra Lux')] %}
+      <label class="fmtbox"><input type="checkbox" name="excluded_formats" value="{{ v }}" {% if v in s.ticket_excluded_formats %}checked{% endif %}>{{ label }}</label>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<section id="cinema" class="scard">
+  <div><div class="rule"></div><h2>Cinema</h2></div>
+  <div class="srow">
+    <div><label class="lab" for="cin">Your cinema</label><div class="help">Switching keeps your taste and ticket history; only the listings change.</div></div>
+    <select id="cin" name="vue_cinema_slug" class="field">
+      {% for c in cinemas %}<option value="{{ c.slug }}" {% if c.slug == s.vue_cinema_slug %}selected{% endif %}>Vue {{ c.name }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="srow">
+    <div><div class="lab">Also follow<span class="later">Later</span></div><div class="help">Other cinemas to watch for films worth paying for. Tickets are never planned there.</div></div>
+    <button class="btn" type="button" disabled style="justify-self:start">Add a cinema</button>
+  </div>
+</section>
+
+<section id="recs" class="scard">
+  <div><div class="rule"></div><h2>Recommendations</h2></div>
+  <div class="srow">
+    <div><label class="lab" for="urg">Best film or never miss one?</label><div class="help">How much to favour films that are about to leave.</div></div>
+    <div><input id="urg" type="range" name="urgency_weight" min="0" max="100" value="{{ (s.urgency_weight * 100)|round|int }}"><div class="ends"><span>Best film first</span><span>Never miss anything</span></div></div>
+  </div>
+  <div class="srow">
+    <div><label class="lab" for="bigw">Big screen or fine at home?</label><div class="help">A lift for new films that suit the cinema (spectacle, EPIC and IMAX showings). Quieter films are never marked down; they only go under Catching later if they don't make the cut.</div></div>
+    <div><input id="bigw" type="range" name="big_screen_weight" min="0" max="100" value="{{ (s.big_screen_weight * 100)|round|int }}"><div class="ends"><span>No lift</span><span>Strong lift</span></div></div>
+  </div>
+  <div class="srow">
+    <div><label class="lab" for="paid">Paid trips a month</label><div class="help">On top of your tickets. The plan picks this many films worth paying for. At 0 it still suggests a few, as optional extras.</div></div>
+    <div><input id="paid" name="paid_trips" type="number" min="0" max="8" value="{{ s.paid_trips }}" class="field" style="width:72px;text-align:center;font-family:var(--display);font-weight:800;font-size:28px"></div>
+  </div>
+  <div class="srow">
+    <div><label class="lab" for="favw">Chase favourites</label><div class="help">Lift films with a better-than-usual chance of a 4.5★ or higher.</div></div>
+    <div><input id="favw" type="range" name="favourite_weight" min="0" max="100" value="{{ (s.favourite_weight * 50)|round|int }}"><div class="ends"><span>Off</span><span>Strong</span></div></div>
+  </div>
+  <div class="srow">
+    <div><label class="lab" for="wlb">Watchlist boost</label><div class="help">Extra weight for films on your Letterboxd watchlist.</div></div>
+    <div><input id="wlb" type="range" name="watchlist_boost" min="0" max="100" value="{{ (s.watchlist_boost * 100)|round|int }}"><div class="ends"><span>Off</span><span>Strong</span></div></div>
+  </div>
+  <div class="srow" style="align-items:start">
+    <div class="lab">Include</div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <label class="tog"><input type="checkbox" name="include_events" {% if s.include_events %}checked{% endif %}>Concerts, opera and theatre</label>
+      <label class="tog"><input type="checkbox" name="include_rereleases" {% if s.include_rereleases %}checked{% endif %}>Re-releases and anniversaries</label>
+      <label class="tog"><input type="checkbox" name="include_seen" {% if s.include_seen %}checked{% endif %}>Films I've already seen</label>
+    </div>
+  </div>
+</section>
+
+<section id="letterboxd" class="scard">
+  <div><div class="rule"></div><h2>Letterboxd</h2></div>
+  <div class="srow">
+    <div><label class="lab" for="lbu">Username</label><div class="help">Your profile needs to be public for new diary entries to come through.</div></div>
+    <input id="lbu" name="letterboxd_user" type="text" value="{{ s.letterboxd_user }}" class="field" autocomplete="off">
+  </div>
+  <div class="srow">
+    <div><label class="lab" for="lbzip">Data export</label>
+      <div class="help">{% if lb_import %}Last imported {{ lb_import.imported_at|dt('%d %b') }}: {{ lb_import.ratings }} ratings{% if lb_import.tv_count %}, {{ lb_import.tv_count }} TV entries skipped{% endif %}.{% else %}Not imported yet. On letterboxd.com: Settings, Data, Export your data.{% endif %}{% if rss.checked_at %} Diary feed checked {{ rss.checked_at|dt('%a %d %b, %H:%M') }}.{% endif %}</div></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <input id="lbzip" type="file" name="export" accept=".zip" form="uploadform" style="max-width:220px">
+      <button class="btn" form="uploadform">Upload</button>
+    </div>
+  </div>
+  <div class="srow">
+    <div><div class="lab">Community averages</div><div class="help">Read from public Letterboxd film pages, a few each morning.</div></div>
+    <label class="tog"><input type="checkbox" name="letterboxd_community" {% if s.letterboxd_community %}checked{% endif %}>Use Letterboxd averages</label>
+  </div>
+</section>
+
+<section id="discord" class="scard">
+  <div><div class="rule"></div><h2>Discord</h2></div>
+  <div class="srow">
+    <div class="lab">Status</div>
+    <div>
+      {% if discord.problems %}
+        <ul style="margin:0;padding-left:18px;color:var(--soft)">{% for p in discord.problems %}<li>{{ p }}</li>{% endfor %}</ul>
+      {% elif bot_ok %}<span style="display:inline-flex;align-items:center;gap:10px"><span style="width:10px;height:10px;border-radius:50%;background:var(--good)" aria-hidden="true"></span>Connected{% if discord.owner %}, DMing {{ discord.owner }}{% endif %}</span>
+      {% elif s.discord_token %}<span class="muted">Not connected yet. Check the token and the logs.</span>
+      {% else %}<span class="muted">Off. Add DISCORD_BOT_TOKEN and DISCORD_USER_ID to the .env file.</span>{% endif %}
+    </div>
+  </div>
+  <div class="srow">
+    <div><div class="lab">Monthly plan</div><div class="help">Sent on this day and time each month.</div></div>
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">
+      <select name="monthly_day" class="field" aria-label="Day of the month">{% for d in range(1, 29) %}<option value="{{ d }}" {% if d == s.monthly_day %}selected{% endif %}>{{ d }}{{ {1: 'st', 2: 'nd', 3: 'rd', 21: 'st', 22: 'nd', 23: 'rd'}.get(d, 'th') }} of the month</option>{% endfor %}</select>
+      <select name="monthly_hour" class="field" aria-label="Time">{% for h in range(24) %}<option value="{{ h }}" {% if h == s.monthly_hour %}selected{% endif %}>{{ '%02d'|format(h) }}:00</option>{% endfor %}</select>
+    </div>
+  </div>
+  <div class="srow">
+    <div class="lab">Test it</div>
+    <button class="btn" form="sendform" style="justify-self:start" {% if not bot_ok %}disabled{% endif %}>Send me the plan now</button>
+  </div>
+</section>
+
+<section id="data" class="scard">
+  <div><div class="rule"></div><h2>Schedule and data</h2></div>
+  <div class="srow">
+    <div><label class="lab" for="rh">Daily refresh</label>
+      <div class="help">Vue listings, your diary and averages.{% if last.finished %} Last run {{ last.finished|dt('%a %d %b, %H:%M') }}{% if last.errors %}, with {{ last.errors|length }} problem{{ 's' if last.errors|length != 1 }}{% else %}, no problems{% endif %}.{% endif %}</div></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <select id="rh" name="refresh_hour" class="field" style="max-width:140px">{% for h in range(24) %}<option value="{{ h }}" {% if h == s.refresh_hour %}selected{% endif %}>{{ '%02d'|format(h) }}:00</option>{% endfor %}</select>
+      <button class="btn" form="refreshform" {% if busy %}disabled{% endif %}>Refresh now</button>
+    </div>
+  </div>
+  {% if last.steps %}
+  <details><summary class="muted small" style="cursor:pointer">What the last refresh did</summary>
+    <ul class="small" style="margin:10px 0 0;padding-left:18px">{% for st in last.steps %}<li style="color:{{ 'var(--soft)' if st.ok else 'var(--bad)' }}"><strong>{{ st.step }}</strong>: {{ st.result }}</li>{% endfor %}</ul>
+  </details>
+  {% endif %}
+  <div class="srow">
+    <div><div class="lab">Run-length history</div><div class="help">{% if hist.films %}{{ hist.films }} film runs at {{ (hist.sites or [])|length }} London Vues, up to {{ hist.last|dt('%d %b %Y') }}, from Clusterflick (CC BY 4.0).{% else %}Not downloaded yet.{% endif %}</div></div>
+    <button class="btn" form="historyform" style="justify-self:start">Update history</button>
+  </div>
+  <div class="srow">
+    <div><div class="lab">Backup</div><div class="help">A copy of your data is saved every morning; the last 14 are kept.{% if backups %} Latest: {{ backups[-1].name }}.{% endif %}</div></div>
+    <a class="btn" href="/backup" style="justify-self:start">Download a backup</a>
+  </div>
+</section>
+
+<div class="savebar">
+  <button class="btn main" type="submit">Save changes</button>
+  <span id="dirty" class="muted small" role="status"></span>
+</div>
+</form>
+
+<section id="notforme" class="scard">
+  <div><div class="rule"></div><h2>Not for me</h2></div>
+  {% if plan.get('dismissed') %}
+  <p class="help" style="margin:0">Films you've ruled out. They won't be suggested again.</p>
+  <div class="list">{% for d in plan.dismissed %}
+    <div class="lrow" style="grid-template-columns:minmax(0,1fr) auto"><span class="t">{{ d.title }}</span>
+      <form class="inline" method="post" action="/undismiss"><input type="hidden" name="film_id" value="{{ d.film_id }}"><input type="hidden" name="next" value="/settings#notforme"><button class="btn small">Bring back</button></form></div>
+  {% endfor %}</div>
+  {% else %}<p class="help" style="margin:0">Nothing ruled out. Use "Not for me" on any film to stop it being suggested.</p>{% endif %}
+</section>
+</div>
+</div>
+
+<form id="uploadform" method="post" action="/upload" enctype="multipart/form-data" hidden><input type="hidden" name="next" value="/settings#letterboxd"></form>
+<form id="sendform" method="post" action="/send" hidden><input type="hidden" name="next" value="/settings#discord"></form>
+<form id="refreshform" method="post" action="/refresh" hidden><input type="hidden" name="next" value="/settings#data"></form>
+<form id="historyform" method="post" action="/history" hidden><input type="hidden" name="next" value="/settings#data"></form>
+{% endblock %}
+{% block script %}
+<script>
+(function () {
+  var form = document.getElementById('settings');
+  var tpm = document.getElementById('tpm');
+  var preview = document.getElementById('stubpreview');
+  var dirty = document.getElementById('dirty');
+  function source() { var c = form.querySelector('input[name=ticket_source]:checked'); return c ? c.value : 'custom'; }
+  function draw() {
+    var n = parseInt(tpm.value || '0', 10);
+    if (source() === 'none') n = 0;
+    if (source() === 'monzo' && n < 1) n = 1;
+    preview.innerHTML = '';
+    for (var i = 0; i < Math.min(n, 10); i++) { var s = document.createElement('span'); s.className = 'mini'; s.textContent = 'ADMIT 1'; preview.appendChild(s); }
+    tpm.disabled = source() === 'none';
+  }
+  document.querySelectorAll('[data-step]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      tpm.value = Math.max(0, Math.min(10, parseInt(tpm.value || '0', 10) + parseInt(b.dataset.step, 10)));
+      if (parseInt(tpm.value, 10) > 1 && source() === 'monzo') form.querySelector('#src-custom').checked = true;
+      form.dispatchEvent(new Event('input'));
+    });
+  });
+  form.addEventListener('input', function () { draw(); dirty.textContent = 'You have unsaved changes'; });
+  form.addEventListener('change', function () { draw(); dirty.textContent = 'You have unsaved changes'; });
+  draw();
+})();
+</script>
+{% endblock %}

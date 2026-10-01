@@ -1,0 +1,21 @@
+# Last Showing - plans your monthly Vue tickets around your Letterboxd taste.
+#
+# Start it (from this folder, in PowerShell):   docker compose up -d --build
+# Dashboard:                                    http://localhost:8095
+#
+# To run it alongside your arr stack instead, copy the "last-showing" service below into that
+# docker-compose.yml, and change "build: ." to the path of this folder (e.g. build: D:/docker/last-showing).
+
+services:
+  last-showing:
+    build: .
+    container_name: last-showing
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8095:8095"
+    volumes:
+      # Everything Last Showing keeps lives here: its database and your Letterboxd export.
+      # On Windows you can use a full path instead, e.g.  D:/docker/last-showing/data:/data
+      - ./data:/data
+    shm_size: "1gb"   # headroom for the headless browser that reads Vue's listings

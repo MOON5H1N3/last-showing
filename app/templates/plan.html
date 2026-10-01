@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% import '_macros.html' as m with context %}
+{% block title %}{{ (mp.get('month_name') or 'Plan') }} | {{ app_name }}{% endblock %}
+{% block content %}
+{% set months = plan.get('months') or [] %}
+{% set is_current = (mi == 0) %}
+{% set name = mp.get('month_name') or today.strftime('%B') %}
+{% set n_tickets = (plan.get('tickets_total', s.tickets) if is_current else s.tickets) %}
+{% set left = mp.get('tickets_left', n_tickets) %}
+
+<section style="padding-top:48px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:32px;align-items:end" class="hero">
+  <div>
+    {% if months|length > 1 %}
+    <nav class="pills" aria-label="Months" style="margin-bottom:18px">
+      {% for mo in months %}<a class="pill" href="/?m={{ loop.index0 }}" {% if loop.index0 == mi %}aria-current="page"{% endif %}>{{ mo.month_name }}</a>{% endfor %}
+    </nav>
+    {% endif %}
+    <h1 class="display" style="margin:0;font-size:clamp(56px,8vw,112px)">{{ name }}{% if months|length > 1 %}<a href="/?m={{ (mi + 1) % (months|length) }}" aria-label="Show {{ months[(mi + 1) % (months|length)].month_name }}" style="color:var(--amber);text-decoration:none;margin-left:12px">›</a>{% endif %}</h1>
+    <p class="muted" style="margin:16px 0 0;font-size:18px">
+      {% if not n_tickets %}No tickets set up, so this is simply what's worth seeing and what's leaving.
+      {% elif not is_current %}A forecast. Vue lists showtimes about a week ahead, so these picks firm up as {{ name }} gets closer.
+      {% elif left == 0 %}All your tickets are used this month. Anything below is worth paying for.
+      {% elif left == 1 %}One ticket left, {{ 'which rolls over if unused' if s.ticket_rollover else 'which expires ' ~ (mp.month_end|dt('%a %d %b')) }}.
+      {% else %}{{ left }} tickets to use by {{ mp.month_end|dt('%A %d %B') }}.{% endif %}
+      {% if is_current and plan.get('tickets_carried') %}Includes {{ plan.tickets_carried }} rolled over from last month.{% endif %}
+    </p>
+  </div>
+  {% if n_tickets %}
+  <div class="stubs" aria-label="{{ name }}'s tickets">
+    {% for i in range(n_tickets) %}
+      {% set u = plan.uses[i] if (is_current and i < (plan.get('uses') or [])|length) else none %}
+      {% if u %}
+      <div class="stub used">
+        <div class="body"><span class="admit">ADMIT ONE</span><span class="no">TICKET {{ i + 1 }}</span>
+          <span class="what" title="{{ u.title }}">{{ u.title }}, {{ u.used_on|dt('%d %b') }}</span>
+          <form class="inline" method="post" action="/undo"><input type="hidden" name="use_id" value="{{ u.id }}"><input type="hidden" name="next" value="{{ path }}"><button class="linkbtn">Give it back</button></form>
+        </div>
+        <div class="tear"><span>USED</span></div>
+      </div>
+      {% elif is_current %}
+      <div class="stub">
+        <div class="body"><span class="admit">ADMIT ONE</span><span class="no">TICKET {{ i + 1 }}</span>
+          <span class="what">Unused, {{ 'rolls over' if s.ticket_rollover else 'expires ' ~ (mp.month_end|dt('%a %d %b')) }}</span></div>
+        <div class="tear"><span>No. {{ '%02d'|format(i + 1) }}</span></div>
+      </div>
+      {% else %}
+      {% set pk = mp.picks[i] if i < (mp.picks|length) else none %}
+      <div class="stub planned">
+        <div class="body"><span class="admit">{{ 'PINNED' if pk and pk.pinned else 'PLANNED' }}</span><span class="no">TICKET {{ i + 1 }}</span>
+          <span class="what" title="{{ pk.title if pk else '' }}">{{ pk.title if pk else 'Nothing planned yet' }}</span></div>
+        <div class="tear"><span>{{ name[:3]|upper }}</span></div>
+      </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+  {% endif %}
+</section>
+
+{% if is_current and plan.get('warning') %}{% set w = plan.warning %}
+<div class="notice" role="alert" style="margin-top:28px">
+  <strong>{{ w.tickets_left }} ticket{{ 's' if w.tickets_left != 1 }} {{ 'expires' if w.tickets_left == 1 else 'expire' }} {% if w.days_left == 1 %}tonight{% else %}in {{ w.days_left }} days{% endif %}.</strong>
+  {% if w.films %}Best showings left:{% for f in w.films %} {{ f.title }}{% if f.sessions %} ({% for t in f.sessions %}<a href="{{ t.url }}" target="_blank" rel="noopener">{{ t.start|dt('%a %d, %H:%M') }}</a>{{ ', ' if not loop.last }}{% endfor %}){% endif %}{{ ';' if not loop.last else '.' }}{% endfor %}{% endif %}
+</div>
+{% endif %}
+
+{% if not plan %}
+<section class="section"><div class="empty">The first refresh hasn't finished yet. Add your Letterboxd export under <a href="/settings#letterboxd">Settings</a>, then check back in a few minutes.</div></section>
+{% elif not mp.picks and not mp.get('worth_paying') and not mp.get('everything') %}
+<section class="section"><div class="empty">{% if is_current %}Nothing matches your ticket rules this month. Check <a href="/settings">Settings</a>, or the last refresh under Settings, Schedule and data.{% else %}Nothing is known to be showing in {{ name }} yet. Vue's coming-soon list grows as the month gets closer.{% endif %}</div></section>
+{% endif %}
+
+{% if mp.picks %}
+<section class="section">
+  <div class="rule"></div>
+  <h2 class="sec">{{ 'Use your tickets on' if is_current else 'Likely picks for ' ~ name }}</h2>
+  <p class="lead">{% if is_current %}In the order you need to go. Each pick weighs how much you'll probably enjoy it against whether it'll still be on next month.{% else %}Films already picked for an earlier month aren't repeated. Pin one to hold a ticket for it.{% endif %}</p>
+  <div class="grid2">{% for p in mp.picks %}{{ m.pick_card(p, mp.month, is_current, name) }}{% endfor %}</div>
+</section>
+{% endif %}
+
+{% if mp.get('worth_paying') %}
+<section class="section">
+  <div class="rule"></div>
+  <h2 class="sec">{% if mp.paid_planned %}Your paid trip{{ 's' if mp.worth_paying|length != 1 }}{% elif not n_tickets %}Worth seeing{% else %}Worth paying for{% endif %}</h2>
+  <p class="lead">{% if not n_tickets and not mp.paid_planned %}The films most worth a cinema trip.{% elif mp.paid_planned %}Planned like your tickets, and not repeated in later months.{% else %}The next best new films, if you fancy paying. Set paid trips a month in <a href="/settings#recs">Settings</a> to plan them properly.{% endif %}</p>
+  <div class="list">{% for i in mp.worth_paying %}{{ m.row(i, m.when(i, is_current), m.note(i, 'screen')) }}{% endfor %}</div>
+</section>
+{% endif %}
+
+{% if mp.get('extras') %}
+<section class="section">
+  <div class="rule"></div>
+  <details class="more">
+    <summary><h2 class="sec" style="display:inline">Re-releases and events</h2> <span class="muted">({{ mp.extras|length }})</span></summary>
+    <p class="lead">Classics back on the big screen, concerts and live theatre. They don't compete with new films for your tickets unless you pin one, it's on your watchlist, or it's one you'd really love and haven't seen.</p>
+    <div class="list">{% for i in mp.extras %}{{ m.row(i, m.when(i, is_current), (('You rated it ' ~ i.your_rating ~ '★') if i.your_rating else i.why or i.big_screen_note)) }}{% endfor %}</div>
+  </details>
+</section>
+{% endif %}
+
+{% if mp.get('at_home') %}
+<section class="section">
+  <div class="rule"></div>
+  <h2 class="sec">Catching later</h2>
+  <p class="lead">Quieter films that didn't make the cut above, and would work just as well at home. Studio films can usually be rented about six weeks after release.</p>
+  <div class="list">{% for i in mp.at_home %}{{ m.row(i, ('From ' ~ (i.home_from|dt('%b %d'))) if i.home_from else 'Later', m.note(i, 'taste')) }}{% endfor %}</div>
+</section>
+{% endif %}
+
+{% if mp.get('everything') %}
+<section class="section">
+  <div class="rule"></div>
+  <details class="more">
+    <summary><h2 class="sec" style="display:inline">Everything else in {{ name }}</h2> <span class="muted">({{ mp.everything|length }})</span></summary>
+    <p class="lead">The rest of what's showing or opening, in date order.</p>
+    <div class="list">{% for i in mp.everything %}{{ m.row(i, m.when(i, is_current), m.note(i, 'taste')) }}{% endfor %}</div>
+  </details>
+</section>
+{% endif %}
+{% endblock %}

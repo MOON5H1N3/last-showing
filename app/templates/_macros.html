@@ -1,0 +1,98 @@
+{# Shared pieces. Import with: {% import '_macros.html' as m with context %} #}
+
+{% macro cert(c) %}{% if c %}<span class="cert {{ c|certclass }}" title="Rated {{ c }}">{{ c }}</span>{% endif %}{% endmacro %}
+
+{% macro rating(v, cls='num') %}<span class="{{ cls }}" title="Predicted rating">{{ '%.1f'|format(v or 0) }}<span class="st">★</span></span>{% endmacro %}
+
+{% macro showtimes(item, days=3) %}
+  {% if item.sessions %}
+  <div class="times">
+    {% for day, group in item.sessions|groupby('day') %}{% if loop.index <= days %}
+    <div class="day">
+      <span class="d">{{ day|dt('%a %d %b') }}</span>
+      {% for t in group %}<a href="{{ t.url }}" target="_blank" rel="noopener" class="chip{{ ' sold' if t.sold_out }}" title="{{ t.screen }}{% if t.formats %} ({{ t.formats|join(', ') }}){% endif %}">{{ t.start[11:16] }}{% if 'epic' in t.formats %}<span class="fmt">EPIC</span>{% endif %}{% if '3d' in t.formats %}<span class="fmt">3D</span>{% endif %}</a>{% endfor %}
+    </div>
+    {% endif %}{% endfor %}
+  </div>
+  {% elif item.release_date and item.release_date > today.isoformat() %}
+  <p class="muted small" style="margin:0">Opens {{ item.release_date|dt('%a %d %b') }}. Vue adds showtimes about a week ahead.</p>
+  {% else %}
+  <p class="muted small" style="margin:0">No showtimes listed for this month yet.</p>
+  {% endif %}
+{% endmacro %}
+
+{% macro pin_dismiss(item, month_key, small=False) %}
+  {% if item.pinned %}
+  <form class="inline" method="post" action="/unpin"><input type="hidden" name="film_id" value="{{ item.film_id }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn{{ ' small' if small }}">Unpin</button></form>
+  {% else %}
+  <form class="inline" method="post" action="/pin"><input type="hidden" name="film_id" value="{{ item.film_id }}"><input type="hidden" name="month" value="{{ month_key }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn{{ ' small' if small }}">I'm seeing this</button></form>
+  {% endif %}
+  <form class="inline" method="post" action="/dismiss"><input type="hidden" name="film_id" value="{{ item.film_id }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn ghost{{ ' small' if small }}">Not for me</button></form>
+{% endmacro %}
+
+{% macro links(item) %}
+  <span class="links">{% if item.trailer %}<a href="{{ item.trailer }}" target="_blank" rel="noopener">Trailer</a>{% endif %}{% if item.letterboxd_url %}<a href="{{ item.letterboxd_url }}" target="_blank" rel="noopener">Letterboxd</a>{% endif %}{% if item.vue_url %}<a href="{{ item.vue_url }}" target="_blank" rel="noopener">Vue</a>{% endif %}</span>
+{% endmacro %}
+
+{% macro reasons(item, n=4) %}
+  {% if item.reasons %}<ul class="reasons">{% for r in item.reasons[:n] %}<li class="{{ 'against' if r.startswith('Against') }}">{{ r }}</li>{% endfor %}</ul>{% endif %}
+{% endmacro %}
+
+{% macro fav(item) %}{% if item.fav_chance is not none and plan.model and plan.model.favourite_rate %}{{ '%.0f'|format(item.fav_chance * 100) }}% chance of a favourite (you usually {{ '%.0f'|format(plan.model.favourite_rate * 100) }}%){% endif %}{% endmacro %}
+
+{% macro confidence(c) %}{{ {'high': 'Confident guess', 'medium': 'Fair guess', 'low': 'Rough guess', 'none': 'Pure guess'}.get(c, '') }}{% endmacro %}
+
+{% macro pick_card(p, month_key, is_current, month_name) %}
+  {% set d = days_until(p.watch_by) %}
+  <article class="card{{ ' pinned' if p.pinned }}">
+    <div class="head">
+      {% if p.backdrop or p.poster %}<span class="bg" style="background-image:url('{{ p.backdrop or p.poster }}')" aria-hidden="true"></span>{% endif %}
+      <a class="pposter" href="/film/{{ p.film_id }}" {% if p.poster %}style="background-image:url('{{ p.poster }}')"{% endif %} aria-label="{{ p.title }}: film page">{% if not p.poster %}<span>{{ p.title }}</span>{% endif %}</a>
+      <div class="hinfo">
+        <div class="hmeta">{{ cert(p.cert) }}{% if p.year %}<span>{{ p.year }}</span>{% endif %}{% if p.runtime %}<span>{{ p.runtime // 60 }}h {{ '%02d'|format(p.runtime % 60) }}m</span>{% endif %}{% if p.pinned %}<span class="badge">Pinned</span>{% elif p.kind == 'rerelease' %}<span class="badge quiet">Re-release</span>{% elif p.kind == 'event' %}<span class="badge quiet">Event</span>{% endif %}</div>
+        <h3><a href="/film/{{ p.film_id }}">{{ p.title }}</a></h3>
+        <div class="score">
+          {{ rating(p.predicted) }}
+          {% if p.watch_by %}<span class="badge{{ ' quiet' if not is_current or (d is not none and d > 7) }}">See by {{ p.watch_by|dt('%a %d %b') }}</span>{% endif %}
+        </div>
+        <span class="muted small">{{ confidence(p.confidence) }}{% if fav(p)|trim %}; {{ fav(p) }}{% endif %}</span>
+        {% if p.big_screen_note and p.big_screen_note != 'Fine at home' %}<span class="bignote">{{ p.big_screen_note }}</span>{% endif %}
+      </div>
+    </div>
+    <div class="in">
+      <p style="margin:0;color:var(--soft);font-size:15px">{% if p.p_available < 1 %}{{ '%.0f'|format(p.p_available * 100) }}% chance it's still on in {{ month_name }}. {% endif %}{{ p.end_note }}{% if p.p_next_month < 0.2 %}. Almost certainly gone the month after.{% elif p.p_next_month > 0.7 %}. Likely still on the month after.{% endif %}</p>
+      {{ reasons(p, 3) }}
+      {{ showtimes(p) }}
+      <div class="actions">
+        {% if is_current and plan.tickets_total %}<form class="inline" method="post" action="/use"><input type="hidden" name="film_id" value="{{ p.film_id }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn main">Used a ticket on this</button></form>{% endif %}
+        {{ pin_dismiss(p, month_key) }}
+        {{ links(p) }}
+      </div>
+    </div>
+  </article>
+{% endmacro %}
+
+{% macro flags(i) %}{# one badge at most: the most useful thing to know #}{% if i.pinned %} <span class="badge">Pinned</span>{% elif i.leaving %} <span class="badge">Leaving soon</span>{% elif i.short_run %} <span class="badge" title="{{ '%.0f'|format((i.p_two_weeks or 0) * 100) }}% chance it's still on two weeks after it opens here">Short run</span>{% elif i.on_watchlist %} <span class="badge quiet">Watchlist</span>{% elif (i.buzz or {}).get('level') == 'big' %} <span class="badge quiet" title="{{ buzz_line(i) }}">Big buzz</span>{% endif %}{% endmacro %}
+
+{% macro when(i, is_current) %}{% if i.opens_in_month and i.release_date %}{{ i.release_date|dt('%a %d') }}{% elif i.sessions %}{{ i.sessions[0].start|dt('%a %d') }}{% elif is_current %}Now{% else %}Still on{% endif %}{% endmacro %}
+
+{% macro note(i, lead) %}{% if lead == 'screen' and i.big_screen_note %}{{ i.big_screen_note }}{% elif i.why %}{{ i.why }}{% else %}{{ i.big_screen_note }}{% endif %}{% endmacro %}
+
+{% macro buzz_line(i) %}{% set b = i.buzz or {} %}{% set bits = [] %}{% if b.get('lists') %}{% set _ = bits.append('on ' ~ '{:,}'.format(b.lists) ~ ' Letterboxd lists') %}{% endif %}{% if b.get('watched') and not i.community %}{% set _ = bits.append('seen early by ' ~ '{:,}'.format(b.watched)) %}{% endif %}{% if b.get('opening_showings') %}{% set _ = bits.append(b.opening_showings ~ ' showings in its opening week here') %}{% endif %}{{ bits|join(', ') }}{% endmacro %}
+
+{% macro poster(i, note) %}
+  <a class="poster" href="/film/{{ i.film_id }}">
+    <span class="img" {% if i.poster %}style="background-image:url('{{ i.poster }}')"{% endif %}>{{ cert(i.cert) }}</span>
+    <span class="t">{{ i.title }}</span>
+    <span class="m"><span>{{ note }}</span><b>{{ '%.1f'|format(i.predicted or 0) }}★</b></span>
+  </a>
+{% endmacro %}
+
+{% macro row(i, when, note) %}
+  <div class="lrow">
+    <span class="when">{{ when }}</span>
+    <a class="thumb" href="/film/{{ i.film_id }}" tabindex="-1" aria-hidden="true" {% if i.poster %}style="background-image:url('{{ i.poster }}')"{% endif %}></a>
+    <div><div class="t"><a href="/film/{{ i.film_id }}">{{ i.title }}</a>{{ flags(i) }}</div><div class="m">{{ note }}</div></div>
+    <span class="r">{{ '%.1f'|format(i.predicted or 0) }}<span class="st">★</span></span>
+  </div>
+{% endmacro %}

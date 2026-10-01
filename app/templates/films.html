@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% import '_macros.html' as m with context %}
+{% block title %}Films | {{ app_name }}{% endblock %}
+{% block content %}
+<section style="padding-top:48px">
+  <h1 class="display" style="margin:0;font-size:clamp(56px,9vw,96px)">Films</h1>
+  <p class="muted" style="margin:12px 0 24px">Everything at Vue {{ cinema_name }} over the next three months, scored for you.</p>
+  <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:center;justify-content:space-between">
+    <nav class="pills" aria-label="Show">
+      {% for key, label in [('all', 'All'), ('now', 'Showing now'), ('soon', 'Coming soon')] %}<a class="pill" href="/films?show={{ key }}&sort={{ sort }}" {% if show == key %}aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
+    </nav>
+    <nav class="pills" aria-label="Sort">
+      {% for key, label in [('best', 'Best for you'), ('leaving', 'Leaving soonest'), ('opening', 'Opening date')] %}<a class="pill" href="/films?show={{ show }}&sort={{ key }}" {% if sort == key %}aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
+    </nav>
+  </div>
+</section>
+
+<section class="section" style="padding-top:32px">
+  {% if films %}
+  <div class="posters">
+    {% for f in films %}
+      {% set note = ('Next: ' ~ (f.sessions[0].start|dt('%a %d %b'))) if f.sessions else ('Opens ' ~ (f.release_date|dt('%d %b')) if f.release_date and f.release_date > today.isoformat() else 'No times yet') %}
+      {{ m.poster(f, note) }}
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty">No films here yet. They appear after the first refresh.</div>
+  {% endif %}
+</section>
+
+{% if plan.get('unscored') %}
+<section class="section">
+  <div class="rule"></div>
+  <h2 class="sec">Couldn't score these</h2>
+  <details style="margin-top:12px"><summary class="muted" style="cursor:pointer">{{ plan.unscored|length }} listing{{ 's' if plan.unscored|length != 1 }}, mostly concerts, opera and theatre. Open to fix a mismatched film.</summary>
+    <p class="lead">These have no film record to learn from. If one is a real film, paste its TMDB link to fix the match.</p>
+    <div class="list">
+      {% for u in plan.unscored %}
+      <div class="lrow" style="grid-template-columns:minmax(0,1fr) auto">
+        <div><div class="t"><a href="{{ u.vue_url }}" target="_blank" rel="noopener">{{ u.title }}</a></div><div class="m">{{ u.kind|capitalize }}{% if u.first_date %}, from {{ u.first_date|dt('%a %d %b') }}{% endif %}. {{ u.why }}</div></div>
+        <form method="post" action="/match" style="display:flex;gap:8px;align-items:center">
+          <input type="hidden" name="film_id" value="{{ u.film_id }}"><input type="hidden" name="next" value="{{ path }}">
+          <label class="small muted" for="m{{ loop.index }}">TMDB link</label>
+          <input id="m{{ loop.index }}" name="tmdb" type="text" placeholder="themoviedb.org/movie/…" style="height:40px;background:#0A0A0A;border:1px solid var(--line2);border-radius:4px;color:var(--ink);padding:0 10px">
+          <button class="btn small">Save</button>
+        </form>
+      </div>
+      {% endfor %}
+    </div>
+  </details>
+</section>
+{% endif %}
+{% endblock %}

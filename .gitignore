@@ -1,0 +1,7 @@
+# your own settings and data never go in the repo
+.env
+data/
+*.zip
+__pycache__/
+*.pyc
+.update/

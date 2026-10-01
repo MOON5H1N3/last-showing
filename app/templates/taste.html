@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Taste | {{ app_name }}{% endblock %}
+{% block style %}
+.boxes{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:20px}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:20px 22px}
+.box h3{margin:0 0 12px;font-family:var(--display);font-weight:800;font-size:22px;letter-spacing:.04em;text-transform:uppercase}
+.box ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
+.box li span{color:var(--muted);font-size:14px}
+{% endblock %}
+{% block content %}
+{% set md = plan.get('model') or {} %}
+<section style="padding-top:48px">
+  <h1 class="display" style="margin:0;font-size:clamp(56px,9vw,96px)">Your taste</h1>
+  {% if md.ratings %}
+  <p class="muted" style="margin:12px 0 0;max-width:70ch">Learned from {{ md.ratings }} of your Letterboxd ratings, averaging {{ md.average }}★. {% if md.favourites %}{{ md.favourites }} are favourites (4.5★ or more), about {{ '%.0f'|format(md.favourite_rate * 100) }}% of what you rate.{% endif %} A lean only shows when it's at least 0.3★ from your average.</p>
+  {% else %}
+  <p class="muted" style="margin:12px 0 0">Nothing learned yet. Upload your Letterboxd export under <a href="/settings#letterboxd">Settings</a>.</p>
+  {% endif %}
+</section>
+
+{% if md.ratings %}
+<section class="section">
+  <div class="rule"></div>
+  <h2 class="sec" style="margin-bottom:20px">What it's learned</h2>
+  <div class="boxes">
+    {% if md.favourite_genres %}
+    <div class="box"><h3>Where your favourites come from</h3>
+      <ol>{% for g, nf, sf, sa in md.favourite_genres[:6] %}<li>{{ g }} <span>{{ nf }} favourites: {{ '%.0f'|format(sf * 100) }}% of them, against {{ '%.0f'|format(sa * 100) }}% of what you watch</span></li>{% endfor %}</ol>
+    </div>
+    {% endif %}
+    {% for key, label in [('director', 'Directors'), ('cast', 'Actors'), ('keyword', 'Themes')] %}
+    {% set t = md.top[key] %}
+    <div class="box"><h3>{{ label }} you rate highly</h3>
+      {% if t.loved %}<ol>{% for nm, dv, n in t.loved[:6] %}<li>{{ nm }} <span>+{{ '%.1f'|format(dv) }}★ over {{ n }}</span></li>{% endfor %}</ol>{% else %}<p class="muted">No strong leans yet.</p>{% endif %}
+      {% if t.not_for_you %}<p class="muted small" style="margin:12px 0 0">Rated lower: {{ t.not_for_you|map('first')|join(', ') }}</p>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{% set mc = md.get('check') %}
+{% if (mc and mc.ok) or (run_check and run_check.ok) %}
+<section class="section">
+  <div class="rule"></div>
+  <h2 class="sec">How well it works</h2>
+  <p class="lead">Both checks test on films the models hadn't seen, so the numbers are honest.</p>
+  <div class="boxes">
+    {% if mc and mc.ok %}
+    <div class="box"><h3>Rating predictions</h3>
+      <p class="muted small" style="margin:0 0 10px">Trained on four-fifths of your {{ mc.films }} ratings and tested on the rest, five times over. Guessing your average every time is off by {{ '%.2f'|format(mc.guess_average_error) }}★.</p>
+      <table class="tablemini"><thead><tr><th>Version</th><th>Off by</th><th>Spots favourites</th></tr></thead><tbody>
+      {% for v in mc.variants %}<tr class="{{ 'win' if v.variant == mc.best }}"><td>{{ v.variant }}{% if v.variant == mc.best %} (in use){% endif %}</td><td>{{ '%.2f'|format(v.error) }}★</td><td>{% if v.top10_favourite_rate is not none %}{{ '%.0f'|format(v.top10_favourite_rate * 100) }}%{% endif %}</td></tr>{% endfor %}
+      </tbody></table>
+      <p class="muted small" style="margin:10px 0 0">"Spots favourites": of the films it thought most likely to be 4.5★+ (its top 10%), how many were. By chance: {{ '%.0f'|format(mc.favourite_rate * 100) }}%.</p>
+      {% if mc.pre_release %}<p class="muted small" style="margin:10px 0 0">Before a film has a Letterboxd average, it's scored on your taste alone: off by {{ '%.2f'|format(mc.pre_release.new) }}★, against {{ '%.2f'|format(mc.pre_release.old) }}★ when a missing average was treated as an average film.</p>{% endif %}
+    </div>
+    {% endif %}
+    {% if run_check and run_check.ok %}{% set h = run_check.horizons['30'] %}
+    <div class="box"><h3>How long films stay on</h3>
+      <p class="muted small" style="margin:0 0 10px">Learned from {{ hist.films }} film runs at {{ (hist.sites or [])|length }} London Vues, {{ hist.first|dt('%d %b %Y') }} to {{ hist.last|dt('%d %b %Y') }}. Tested on {{ run_check.films_test }} films it hadn't seen.</p>
+      <table class="tablemini"><thead><tr><th>It gave a month-long run</th><th>Came true</th><th>Cases</th></tr></thead><tbody>
+      {% for b in h.calibration %}<tr><td>{{ b.predicted }}</td><td>{{ '%.0f'|format(b.came_true * 100) }}%</td><td>{{ b.cases }}</td></tr>{% endfor %}
+      </tbody></table>
+      <p class="muted small" style="margin:10px 0 0">{{ '%.0f'|format((1 - h.brier / h.brier_weeks_only) * 100) }}% more accurate than going by weeks since release alone.</p>
+    </div>
+    {% endif %}
+  </div>
+</section>
+{% endif %}
+
+<section class="section">
+  <div class="rule"></div>
+  <h2 class="sec">Does buzz change your ratings?</h2>
+  {% if bc.ok %}
+  <p class="lead">
+    {% if bc.lean_is_clear %}Yes. {% if bc.slope_per_10x < 0 %}The bigger a film is, the further you rate it below the crowd{% else %}The bigger a film is, the further you rate it above the crowd{% endif %}: {{ '%+.2f'|format(bc.slope_per_10x) }}★ for every ten times more Letterboxd ratings (give or take {{ '%.2f'|format(bc.slope_range) }}★).
+    {% else %}Not in a way that shows up. How big a film is makes no clear difference to how you rate it against the crowd ({{ '%+.2f'|format(bc.slope_per_10x) }}★ per ten times more ratings, give or take {{ '%.2f'|format(bc.slope_range) }}★).{% endif %}
+    Across {{ bc.films }} of your films, you rate {{ '%.2f'|format(bc.overall_gap|abs) }}★ {{ 'below' if bc.overall_gap < 0 else 'above' }} the Letterboxd average on the whole.
+  </p>
+  <table class="tablemini" style="max-width:620px"><thead><tr><th>Films</th><th>Letterboxd ratings</th><th>You against the crowd</th></tr></thead><tbody>
+    {% for b in bc.bands %}<tr><td>{{ b.band }} ({{ b.films }})</td><td>{{ '{:,}'.format(b.from) }} to {{ '{:,}'.format(b.to) }}</td><td>{{ '%+.2f'|format(b.gap) }}★ <span class="faint">± {{ '%.2f'|format(b.range) }}</span></td></tr>{% endfor %}
+  </tbody></table>
+  {% else %}
+  <p class="lead">Not enough data yet: this needs Letterboxd rating counts for {{ bc.needed }} of your rated films, and has {{ bc.films }}. They're read about 150 a day during the refresh{% if bc.waiting %}, with {{ bc.waiting }} still to go{% endif %}.</p>
+  {% endif %}
+  <p class="muted small" style="max-width:70ch">This compares finished films by how many people ended up rating them. Buzz before release is a different thing, and Last Showing has started logging it for every film at your cinema (Letterboxd lists, early watches, likes and TMDB popularity): {{ bc.logged }} film{{ 's' if bc.logged != 1 }} so far, {{ bc.logged_then_rated }} of them since rated by you. Once about 20 have been rated, this section will also say whether pre-release buzz predicts how much you'll like a film.</p>
+</section>
+
+{% if lb_import and (lb_import.unmatched or lb_import.tv) %}
+<section class="section">
+  <div class="rule"></div>
+  <h2 class="sec">Left out of your ratings</h2>
+  <details style="margin-top:12px"><summary class="muted" style="cursor:pointer">{{ lb_import.tv_count or 0 }} TV entries and {{ lb_import.unmatched_count or 0 }} titles that couldn't be matched to a film</summary>
+    <p class="muted small">{% if lb_import.tv %}TV: {{ lb_import.tv|join(', ') }}.{% endif %}</p>
+    <p class="muted small">{% if lb_import.unmatched %}Unmatched: {{ lb_import.unmatched|join(', ') }}.{% endif %}</p>
+  </details>
+</section>
+{% endif %}
+{% endblock %}
