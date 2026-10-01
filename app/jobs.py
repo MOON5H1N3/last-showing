@@ -204,9 +204,13 @@ class Engine:
                     rated = [t for t in rated_ids if t not in have] + sorted(
                         (t for t in rated_ids if t in no_counts), key=lambda t: have.get(t, ""))
                     todo = cinema[:s.community_fetch_limit] + rated[:s.community_backfill]
-                    n = await letterboxd.fetch_community(db, todo, len(todo))
+                    n = await letterboxd.fetch_community(db, todo, len(todo), buzz_ids=set(cinema))
                     left = max(0, len(rated) - s.community_backfill)
-                    return f"{n} averages and buzz fetched" + (f"; {left} of your rated films still to backfill" if left else "")
+                    b = db.get("letterboxd_buzz_last") or {}
+                    msg = f"{n} averages fetched, {b.get('with_buzz', 0)} with buzz (lists, watches, likes)"
+                    if b.get("error") and not b.get("with_buzz"):
+                        msg += f"; buzz failed: {b['error']}"
+                    return msg + (f"; {left} of your rated films still to backfill" if left else "")
                 await step("Letterboxd averages", do_comm)
 
             # 6b. Vue listing history (how long films last): first run a couple of minutes, then weekly top-ups

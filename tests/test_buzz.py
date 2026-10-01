@@ -26,6 +26,13 @@ class TestLetterboxdParsing(unittest.TestCase):
         self.assertEqual(letterboxd.parse_stats(STATS), {"watched": 776, "lists": 17515, "likes": 277})
         self.assertEqual(letterboxd.parse_stats(""), {"watched": None, "lists": None, "likes": None})
 
+    def test_film_slug(self):
+        self.assertEqual(letterboxd.film_slug("https://letterboxd.com/film/the-social-reckoning/"), "the-social-reckoning")
+        self.assertEqual(letterboxd.film_slug("https://letterboxd.com/tmdb/1/",
+                                              '<link rel="canonical" href="https://letterboxd.com/film/digger-2026/">'),
+                         "digger-2026")
+        self.assertIsNone(letterboxd.film_slug("https://letterboxd.com/tmdb/1/", "<html></html>"))
+
     def test_rating(self):
         self.assertEqual(letterboxd.parse_rating(LD), (3.78, 1082990))
         self.assertEqual(letterboxd.parse_rating("<html></html>", "3.12 out of 5"), (3.12, None))

@@ -189,6 +189,18 @@ def parse_rating(html: str, twitter_meta: str | None = None) -> tuple[float | No
     return avg, (int(n.group(1)) if n else None)
 
 
+SLUG_RE = re.compile(r"letterboxd\.com/film/([^/\"'?#]+)/")
+
+
+def film_slug(url: str, html: str = "") -> str | None:
+    """The film's Letterboxd slug, from where the page ended up or, failing that, its canonical link."""
+    for text in (url or "", html or ""):
+        m = SLUG_RE.search(text) or re.search(r"^/film/([^/]+)/", text)
+        if m:
+            return m.group(1)
+    return None
+
+
 def parse_stats(html: str) -> dict[str, int | None]:
     """Watched / lists / likes counts from Letterboxd's film stats fragment."""
     text = (html or "").replace("&nbsp;", " ").replace("\xa0", " ")
@@ -199,7 +211,7 @@ def parse_stats(html: str) -> dict[str, int | None]:
     return out
 
 
-async def fetch_community(db: DB, tmdb_ids: list[int], limit: int) -> int:
+async def fetch_community(db: DB, tmdb_ids: list[int], limit: int, buzz_ids: set[int] | None = None) -> int:
     """Letterboxd average, how many ratings it's based on, and buzz (watched / lists / likes) for films,
     from the public film page (via letterboxd.com/tmdb/<id>)."""
     todo = [t for t in dict.fromkeys(tmdb_ids) if t][:limit]
@@ -207,7 +219,8 @@ async def fetch_community(db: DB, tmdb_ids: list[int], limit: int) -> int:
         return 0
     from .browser import browser_page
 
-    got = 0
+    got = with_buzz = 0
+    stats_errors: list[str] = []
     now = datetime.now()
     stamp, day = now.isoformat(timespec="seconds"), now.date().isoformat()
     pops = {r["tmdb_id"]: r["data"] for r in db.q(
@@ -223,11 +236,25 @@ async def fetch_community(db: DB, tmdb_ids: list[int], limit: int) -> int:
                     meta = await page.get_attribute('meta[name="twitter:data2"]', "content", timeout=3000) \
                         if 'twitter:data2' in html else None
                     avg, count = parse_rating(html, meta)
-                    slug = re.search(r"/film/([^/]+)/", page.url)
-                    if slug:
-                        frag = await page.evaluate("async (u) => (await fetch(u)).text()", f"/csi/film/{slug.group(1)}/stats/")
-                        stats = parse_stats(frag)
                     got += 1
+                    # buzz: Letterboxd's stats fragment, opened directly (fetching it from inside the film page
+                    # fails in a headless browser)
+                    slug = film_slug(page.url, html) if (buzz_ids is None or t in buzz_ids) else None
+                    if buzz_ids is not None and t not in buzz_ids:
+                        pass  # your older rated films: their rating count is enough
+                    elif slug:
+                        try:
+                            await page.goto(f"https://letterboxd.com/csi/film/{slug}/stats/",
+                                            wait_until="domcontentloaded", timeout=20000)
+                            stats = parse_stats(await page.content())
+                        except Exception as e:
+                            stats_errors.append(str(e).splitlines()[0][:160])
+                        if stats["lists"] is not None or stats["watched"] is not None:
+                            with_buzz += 1
+                        elif not stats_errors:
+                            stats_errors.append("stats page had no counts")
+                    else:
+                        stats_errors.append("couldn't find the film's Letterboxd address")
                 except Exception as e:  # missing rating, page change, or blocked - just skip
                     log.debug("community rating failed for %s: %s", t, e)
                 db.x("""INSERT OR REPLACE INTO community(tmdb_id,lb_avg,fetched_at,rating_count,watched,lists,likes)
@@ -243,4 +270,7 @@ async def fetch_community(db: DB, tmdb_ids: list[int], limit: int) -> int:
                 await asyncio.sleep(1.5)
     except Exception as e:
         log.warning("Letterboxd community ratings unavailable this run: %s", e)
+    if stats_errors and not with_buzz:
+        log.warning("Letterboxd buzz (lists, watches, likes) couldn't be read this run: %s", stats_errors[0])
+    db.set("letterboxd_buzz_last", {"films": got, "with_buzz": with_buzz, "error": stats_errors[0] if stats_errors else None})
     return got
