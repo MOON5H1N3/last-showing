@@ -15,6 +15,11 @@ Not affiliated with Vue Entertainment or Monzo.
 
 **Buzz** is shown on every film page: how many Letterboxd lists it's on, how many members have seen it early, likes, TMDB popularity, and how many showings your Vue gave its opening week, compared with everything else at your cinema. Buzz doesn't change the predicted rating. It's logged over time so that, once enough of those films are rated, the Taste page can say whether pre-release buzz predicts how much you'll like a film. It already says whether you rate big films differently from the crowd.
 
+**Early reviews** (optional) appear as a badge on new and upcoming films, e.g. "Critics ✔ Audiences ✔" or "Critics ✔ Audiences split"; hover over it for the scores. Critics are Rotten Tomatoes and Metacritic (through OMDb) and the Guardian's star rating; the audience is the Letterboxd average once at least 50 people have rated it. Like buzz, reviews are there for you to judge and never change predictions. Both critic sources need a free key in `.env`:
+
+- `OMDB_API_KEY`: at [omdbapi.com](https://www.omdbapi.com/apikey.aspx), choose FREE (1,000 requests a day), and click the activation link in the email.
+- `GUARDIAN_API_KEY`: at [open-platform.theguardian.com](https://open-platform.theguardian.com/access/), choose "Register for a developer key".
+
 The **Taste** page's "How well it works" section shows both models tested on films they hadn't seen: rating predictions on a held-out fifth of your ratings, and run lengths on held-out films.
 
 Ticket tracking works in two ways. It's automatic: a film you log in your Letterboxd diary that was showing at your Vue that day counts as a used ticket, up to your monthly allowance. You can also mark or undo tickets yourself, from the dashboard or with Discord's buttons and `/used`.

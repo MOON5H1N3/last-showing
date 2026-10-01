@@ -123,6 +123,17 @@ input[type=range]{width:100%;accent-color:var(--amber)}
   </div>
 </section>
 
+<section id="reviews" class="scard">
+  <div><div class="rule"></div><h2>Early reviews</h2></div>
+  <div class="srow">
+    <div><div class="lab">Critics</div><div class="help">Rotten Tomatoes and Metacritic (OMDb), and the Guardian's star ratings, shown as a badge on new and upcoming films. Hover over the badge for the scores. They never change your predicted ratings.</div></div>
+    <div class="muted">
+      OMDb: {% if s.omdb_key %}<strong style="color:var(--amber)">connected</strong>{% else %}not set (add OMDB_API_KEY to .env){% endif %}<br>
+      The Guardian: {% if s.guardian_key %}<strong style="color:var(--amber)">connected</strong>{% else %}not set (add GUARDIAN_API_KEY to .env){% endif %}
+    </div>
+  </div>
+</section>
+
 <section id="letterboxd" class="scard">
   <div><div class="rule"></div><h2>Letterboxd</h2></div>
   <div class="srow">

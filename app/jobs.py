@@ -8,7 +8,7 @@ import traceback
 from pathlib import Path
 from datetime import datetime, timedelta
 
-from . import letterboxd, tickets, vue
+from . import letterboxd, reviews, tickets, vue
 from .config import Settings
 from .db import DB
 from .planner import make_plan
@@ -166,6 +166,30 @@ class Engine:
                     b = await tmdb.details_many(rated + wl, max_age_days=90)
                     return f"{len(a)} cinema films, {len(b)} of your films"
                 await step("TMDB metadata", do_meta)
+
+                # 5a. early reviews for films at your cinema (optional keys): new and upcoming films every 2 days,
+                # older ones every 2 weeks
+                if s.omdb_key or s.guardian_key:
+                    async def do_reviews():
+                        listed = set(db.get("vue_listed_film_ids", []))
+                        today = datetime.now().date()
+                        fetched = {r["tmdb_id"]: r["fetched_at"] for r in db.q("SELECT tmdb_id, fetched_at FROM reviews")}
+                        todo = []
+                        for r in db.q("""SELECT v.film_id, v.tmdb_id, m.data FROM vue_films v JOIN movies m
+                                         ON m.tmdb_id=v.tmdb_id WHERE v.kind='film'"""):
+                            if r["film_id"] not in listed:
+                                continue
+                            meta = json.loads(r["data"])
+                            rel = meta.get("release_date") or ""
+                            fresh = rel >= (today - timedelta(days=45)).isoformat()
+                            cutoff = (datetime.now() - timedelta(days=2 if fresh else 14)).isoformat()
+                            if fetched.get(r["tmdb_id"], "") < cutoff:
+                                todo.append({"tmdb_id": r["tmdb_id"], "title": meta.get("title"), "year": meta.get("year"),
+                                             "imdb_id": meta.get("imdb_id")})
+                        todo = list({f["tmdb_id"]: f for f in todo}.values())[:80]
+                        n_scores, n_guardian = await reviews.fetch_reviews(db, s.omdb_key, s.guardian_key, todo)
+                        return f"{len(todo)} films checked: {n_scores} with Rotten Tomatoes/Metacritic, {n_guardian} Guardian reviews"
+                    await step("Early reviews", do_reviews)
 
                 # 5b. held-out model check (weekly, or when your ratings change a lot)
                 async def do_check():

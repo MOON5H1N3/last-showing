@@ -61,6 +61,9 @@ class Settings:
 
     # TMDB
     tmdb_key: str = field(default_factory=lambda: _env("TMDB_API_KEY", ""))
+    # Early reviews (optional, both free): omdbapi.com/apikey.aspx and open-platform.theguardian.com/access
+    omdb_key: str = field(default_factory=lambda: _env("OMDB_API_KEY", ""))
+    guardian_key: str = field(default_factory=lambda: _env("GUARDIAN_API_KEY", ""))
 
     # Discord
     discord_token: str = field(default_factory=lambda: _env("DISCORD_BOT_TOKEN", ""))

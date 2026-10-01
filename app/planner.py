@@ -22,6 +22,7 @@ from datetime import date, datetime, timedelta
 
 from .config import Settings
 from .db import DB
+from .reviews import verdict as review_verdict
 from .taste import VARIANTS, TasteModel, community_value, size_effect, stars
 
 MAJOR = ("disney", "warner", "universal", "sony", "paramount", "20th century")
@@ -183,6 +184,7 @@ class Item:
     extra: bool = False                           # a re-release or event: shown on its own, not competing for tickets
     wanted: bool = False                          # you marked it "Want to see"
     paid_trip: bool = False                       # wanted, but no free ticket fits before it's likely to leave
+    reviews: dict = field(default_factory=dict)   # critics and audience verdicts, for you to judge (not scored)
     p_two_weeks: float | None = None              # chance it's still on two weeks after its first showing here
 
 
@@ -318,6 +320,7 @@ def make_plan(db: DB, s: Settings, now: datetime | None = None, model: TasteMode
     metas = {r["tmdb_id"]: json.loads(r["data"]) for r in db.q("SELECT tmdb_id, data FROM movies")}
     comm_rows = {r["tmdb_id"]: r for r in db.q("SELECT * FROM community")}
     comm = {t: r["lb_avg"] for t, r in comm_rows.items()}
+    review_rows = {r["tmdb_id"]: r for r in db.q("SELECT * FROM reviews")}
 
     dismissed = {r["film_id"] for r in db.q("SELECT film_id FROM dismissed")}
     pins = {r["film_id"]: r["month"] for r in db.q("SELECT film_id, month FROM pins")}
@@ -421,6 +424,12 @@ def make_plan(db: DB, s: Settings, now: datetime | None = None, model: TasteMode
             item.priority = adj + s.big_screen_weight * max(0.0, item.big_screen - 0.5)
         # Re-releases and events sit in their own section rather than taking tickets from new films, unless
         # you'd really love one you haven't seen, or it's on your watchlist (a pin always counts)
+        rv = review_rows.get(tid)
+        v = review_verdict(rv["rt"] if rv else None, rv["metascore"] if rv else None, rv["guardian_stars"] if rv else None,
+                           comm.get(tid), crow["rating_count"] if crow is not None else None)
+        recent = release is None or release >= today - timedelta(days=45)  # early reviews: new and upcoming films
+        if v["label"] and f["kind"] == "film" and recent:
+            item.reviews = {**v, "guardian_url": rv["guardian_url"] if rv else None}
         item.wanted = f["film_id"] in wants
         item.extra = (f["kind"] != "film" and not on_wl and not item.wanted
                       and not (yours is None and rating >= model.mu + 0.75))

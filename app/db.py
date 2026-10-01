@@ -36,6 +36,11 @@ CREATE TABLE IF NOT EXISTS snapshots (
 
 CREATE TABLE IF NOT EXISTS movies (tmdb_id INTEGER PRIMARY KEY, data TEXT, fetched_at TEXT);
 CREATE TABLE IF NOT EXISTS community (tmdb_id INTEGER PRIMARY KEY, lb_avg REAL, fetched_at TEXT);
+-- Early reviews (critics) for films at your cinema
+CREATE TABLE IF NOT EXISTS reviews (
+    tmdb_id INTEGER PRIMARY KEY, imdb_id TEXT, rt INTEGER, metascore INTEGER, imdb_rating REAL,
+    guardian_stars INTEGER, guardian_url TEXT, fetched_at TEXT
+);
 -- Buzz over time: one row per film per day it was checked (lets us learn later what pre-release buzz means)
 CREATE TABLE IF NOT EXISTS buzz_log (
     tmdb_id INTEGER, day TEXT, lb_avg REAL, rating_count INTEGER, watched INTEGER, lists INTEGER, likes INTEGER,

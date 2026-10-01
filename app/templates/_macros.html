@@ -58,7 +58,7 @@
       {% if p.backdrop or p.poster %}<span class="bg" style="background-image:url('{{ p.backdrop or p.poster }}')" aria-hidden="true"></span>{% endif %}
       <a class="pposter" href="/film/{{ p.film_id }}" {% if p.poster %}style="background-image:url('{{ p.poster }}')"{% endif %} aria-label="{{ p.title }}: film page">{% if not p.poster %}<span>{{ p.title }}</span>{% endif %}</a>
       <div class="hinfo">
-        <div class="hmeta">{{ cert(p.cert) }}{% if p.year %}<span>{{ p.year }}</span>{% endif %}{% if p.runtime %}<span>{{ p.runtime // 60 }}h {{ '%02d'|format(p.runtime % 60) }}m</span>{% endif %}{% if p.paid_trip %}<span class="badge">Paid trip</span>{% elif p.wanted %}<span class="badge">Want to see</span>{% elif p.pinned %}<span class="badge">Pinned</span>{% elif p.kind == 'rerelease' %}<span class="badge quiet">Re-release</span>{% elif p.kind == 'event' %}<span class="badge quiet">Event</span>{% endif %}</div>
+        <div class="hmeta">{{ cert(p.cert) }}{% if p.year %}<span>{{ p.year }}</span>{% endif %}{% if p.runtime %}<span>{{ p.runtime // 60 }}h {{ '%02d'|format(p.runtime % 60) }}m</span>{% endif %}{% if p.paid_trip %}<span class="badge">Paid trip</span>{% elif p.wanted %}<span class="badge">Want to see</span>{% elif p.pinned %}<span class="badge">Pinned</span>{% elif p.kind == 'rerelease' %}<span class="badge quiet">Re-release</span>{% elif p.kind == 'event' %}<span class="badge quiet">Event</span>{% endif %}{{ review_badge(p) }}</div>
         <h3><a href="/film/{{ p.film_id }}">{{ p.title }}</a></h3>
         <div class="score">
           {{ rating(p.predicted) }}
@@ -87,6 +87,8 @@
 
 {% macro note(i, lead) %}{% if lead == 'screen' and i.big_screen_note %}{{ i.big_screen_note }}{% elif i.why %}{{ i.why }}{% else %}{{ i.big_screen_note }}{% endif %}{% endmacro %}
 
+{% macro review_badge(i) %}{% set r = i.reviews or {} %}{% if r.get('label') %} <span class="badge rev{{ ' good' if r.critics != 'poor' and r.audience != 'poor' and 'good' in [r.critics, r.audience] else '' }}" title="{{ r.detail }}">{{ r.label }}</span>{% endif %}{% endmacro %}
+
 {% macro buzz_line(i) %}{% set b = i.buzz or {} %}{% set bits = [] %}{% if b.get('tmdb_popularity') %}{% set _ = bits.append('TMDB popularity ' ~ ('%.0f'|format(b.tmdb_popularity))) %}{% endif %}{% if b.get('opening_showings') %}{% set _ = bits.append(b.opening_showings ~ ' showings in its opening week here') %}{% endif %}{% if b.get('early_ratings') %}{% set _ = bits.append('{:,}'.format(b.early_ratings) ~ ' early Letterboxd ratings') %}{% endif %}{{ bits|join(', ') }}{% endmacro %}
 
 {% macro poster(i, note) %}
@@ -101,7 +103,7 @@
   <div class="lrow">
     <span class="when">{{ when }}</span>
     <a class="thumb" href="/film/{{ i.film_id }}" tabindex="-1" aria-hidden="true" {% if i.poster %}style="background-image:url('{{ i.poster }}')"{% endif %}></a>
-    <div><div class="t"><a href="/film/{{ i.film_id }}">{{ i.title }}</a>{{ flags(i) }}</div><div class="m">{{ note }}</div></div>
+    <div><div class="t"><a href="/film/{{ i.film_id }}">{{ i.title }}</a>{{ flags(i) }}{{ review_badge(i) }}</div><div class="m">{{ note }}</div></div>
     <span class="r"><form class="inline" method="post" action="{{ '/unwant' if i.wanted else '/want' }}"><input type="hidden" name="film_id" value="{{ i.film_id }}"><input type="hidden" name="next" value="{{ path }}"><button class="wantstar{{ ' on' if i.wanted }}" title="{{ 'On your Want to see list' if i.wanted else 'Want to see' }}" aria-label="{{ 'Remove from' if i.wanted else 'Add to' }} Want to see: {{ i.title }}" aria-pressed="{{ 'true' if i.wanted else 'false' }}">{{ '★' if i.wanted else '☆' }}</button></form>{{ '%.1f'|format(i.predicted or 0) }}<span class="st">★</span></span>
   </div>
 {% endmacro %}

@@ -207,6 +207,7 @@ def slim_movie(d: dict) -> dict:
     crew = credits.get("crew") or []
     return {
         "id": d.get("id"),
+        "imdb_id": d.get("imdb_id"),
         "title": d.get("title"),
         "original_title": d.get("original_title"),
         "year": int((d.get("release_date") or "0")[:4] or 0) or None,
