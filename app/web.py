@@ -10,6 +10,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
+from markupsafe import Markup, escape
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -19,7 +20,7 @@ from starlette.responses import (FileResponse, HTMLResponse, JSONResponse, Plain
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
-from . import settings_store, tickets
+from . import settings_store, tickets, watch
 from .jobs import Engine
 
 log = logging.getLogger(__name__)
@@ -114,6 +115,8 @@ def create_app(engine: Engine, bot=None) -> Starlette:
         ctx = dict(
             plan=p, s=s, today=today, page=page, busy=engine.busy, step=engine.running_step,
             msg=request.query_params.get("msg", ""), problems=s.problems(), open_alerts=db.get("alerts_open") or {},
+            film_notices=[{**n, "html": Markup(re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", str(escape(n["text"]))))}
+                          for n in watch.current_notices(db, today)],
             cinema_name=s.vue_cinema_name or s.vue_cinema_slug.replace("-", " ").title(),
             path=request.url.path + (f"?{request.url.query}" if request.url.query else ""),
             days_until=lambda v: (date.fromisoformat(v[:10]) - today).days if v else None,

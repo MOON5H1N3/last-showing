@@ -115,6 +115,16 @@ Nothing is hard-coded to one person or cinema. A friend runs their own copy with
 
 Last Showing DMs you only when something stops working: straight away if a key (TMDB, OMDb, the Guardian) is rejected, and when any step of the daily refresh has failed twice in a row. When it's working again you get a short "fixed" message. Open problems also show as a red notice at the top of every dashboard page, in case Discord is the thing that's broken.
 
+## When a film you're set on stops showing
+
+Vue's coming-soon list sometimes includes films your cinema never gets. So:
+
+- A ticket pick with no showtimes at your cinema yet is tagged **Not confirmed**.
+- Vue puts out each Tuesday the times for the week from Friday. If that Tuesday passes with nothing for a film, it's tagged **No times here** and stops holding a ticket. It's re-checked every morning, so if times turn up later it's back in the running.
+- If a film you pinned or marked Want to see disappears from your cinema (or has no times when they were due) on two refreshes in a row, you get one DM and a notice on the plan page for a week. Your pin and Want to see are kept, so if it comes back it's in your plan again, with one more DM to say so.
+
+It stays quiet: nothing about recommendations, nothing repeated, a one-morning blip at Vue sends nothing, and everything from one refresh (including break alerts) comes in a single DM.
+
 ## Troubleshooting
 
 - **"Vue listings" fails in the refresh log.** Vue may have changed its site. The listings are read the same way the website reads them, from `/api/microservice/showings/cinemas/<id>/films`. If the cinema ID lookup fails, set `VUE_CINEMA_ID` (Cribbs Causeway is `10018`).

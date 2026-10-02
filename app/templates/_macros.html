@@ -57,10 +57,11 @@
 {%- elif ctx == 'pick' %}{% set _ = t.append(('', 'Ticket pick')) %}
 {%- elif i.wanted %}{% set _ = t.append(('', 'Want to see')) %}
 {%- elif i.pinned %}{% set _ = t.append(('', 'Pinned')) %}{% endif %}
+{%- if i.times_overdue %}{% set _ = t.insert(0, ('plain', 'No times here')) %}{% elif i.unconfirmed and (ctx == 'pick' or i.paid_trip) %}{% set _ = t.append(('plain', 'Not confirmed')) %}{% endif %}
 {%- if i.leaving %}{% set _ = t.append(('leaving', 'Leaving soon')) %}{% elif i.short_run %}{% set _ = t.append(('leaving', 'Short run')) %}{% endif %}
 {%- if i.kind == 'rerelease' %}{% set _ = t.append(('plain', 'Re-release')) %}{% elif i.kind == 'event' %}{% set _ = t.append(('plain', 'Event')) %}{% endif %}
 {%- if i.on_watchlist and not i.wanted %}{% set _ = t.append(('plain', 'Watchlist')) %}{% endif %}
-{%- if t %}<span class="tags">{% for cls, word in t[:2] %}<span class="tag {{ cls }}"{% if word == 'Short run' %} title="{{ '%.0f'|format((i.p_two_weeks or 0) * 100) }}% chance it's still on two weeks after it opens here"{% endif %}>{{ word }}</span>{% endfor %}</span>{% endif %}{% endmacro %}
+{%- if t %}<span class="tags">{% for cls, word in t[:2] %}<span class="tag {{ cls }}"{% if word == 'Short run' %} title="{{ '%.0f'|format((i.p_two_weeks or 0) * 100) }}% chance it's still on two weeks after it opens here"{% elif word == 'Not confirmed' %} title="Your cinema hasn't listed showtimes yet. If none come when Vue puts out that week's times (the Tuesday before), it stops holding a ticket."{% elif word == 'No times here' %} title="Vue has put out the times for the week it opens, with none at your cinema, so it isn't holding a ticket. If times turn up later, it's back in the running."{% endif %}>{{ word }}</span>{% endfor %}</span>{% endif %}{% endmacro %}
 
 {% macro info(i) %}{% set bits = [] %}{% if i.genres %}{% set _ = bits.append(i.genres[:2]|join(', ')) %}{% endif %}{% if i.runtime %}{% set _ = bits.append((i.runtime // 60) ~ 'h ' ~ ('%02d'|format(i.runtime % 60)) ~ 'm') %}{% endif %}{% set big = i.big_screen_note if i.big_screen_note and i.big_screen_note != 'Fine at home' else '' %}{{ bits|join(' · ') }}{% if bits %}. {% endif %}{% if i.why %}{{ i.why }}. {% endif %}{% if big %}{{ big }}. {% endif %}{% if (i.buzz or {}).get('level') == 'big' %}Big buzz: {{ buzz_line(i) }}.{% endif %}{% endmacro %}
 

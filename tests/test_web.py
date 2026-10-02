@@ -112,3 +112,14 @@ class TestTheme(unittest.TestCase):
         c.post("/settings", data={**FORM, "theme": "system"})
         self.assertNotIn('data-theme=', c.get("/").text.split("<head>")[0])
         self.assertEqual(c.get("/static/app-icon.png").status_code, 200)
+
+
+class TestFilmNotices(unittest.TestCase):
+    def test_notice_on_plan(self):
+        from datetime import datetime as _dt
+        c, s, db = client()
+        today = _dt.now(s.tz).date().isoformat()
+        db.set("film_notices", [{"film_id": "X", "kind": "gone", "on": today,
+                                 "text": "**Extra <Geography>** is no longer listed at Vue Test."}])
+        r = c.get("/")
+        self.assertIn("<strong>Extra &lt;Geography&gt;</strong> is no longer listed", r.text)

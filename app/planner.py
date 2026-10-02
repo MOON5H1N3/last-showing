@@ -29,7 +29,7 @@ MAJOR = ("disney", "warner", "universal", "sony", "paramount", "20th century")
 MID = ("studiocanal", "lionsgate", "entertainment film", "altitude", "signature", "sky", "black bear",
        "elevation", "focus", "eone", "vertigo", "searchlight", "a24")
 MONTHS_AHEAD = 3  # this month and the next two
-PLAN_VERSION = 8  # bump when the plan's shape changes, so a saved plan from an older version is rebuilt
+PLAN_VERSION = 9  # bump when the plan's shape changes, so a saved plan from an older version is rebuilt
 CONF_SHRINK = {"high": 1.0, "medium": 0.9, "low": 0.75, "none": 0.5}
 
 
@@ -187,6 +187,8 @@ class Item:
     reviews: dict = field(default_factory=dict)   # critics and audience verdicts, for you to judge (not scored)
     model_rating: float | None = None             # the model's own prediction, before your rating or watchlist boost
     p_two_weeks: float | None = None              # chance it's still on two weeks after its first showing here
+    unconfirmed: bool = False                     # no showtimes at your cinema yet
+    times_overdue: bool = False                   # ...and Vue has already put out that week's times: no ticket for it
 
 
 BIG_FORMATS = {"epic", "imax", "biggest-screen", "4dx", "screenx"}
@@ -194,6 +196,18 @@ SPECTACLE = {"Science Fiction": 0.35, "Action": 0.3, "Adventure": 0.3, "Fantasy"
              "Animation": 0.15, "Horror": 0.15, "Music": 0.15, "Thriller": 0.05}
 QUIET = {"Drama": -0.1, "Romance": -0.1, "Documentary": -0.1, "Comedy": -0.05}
 HOME_WINDOW_DAYS = 45  # most studio films can be rented at home roughly six weeks after release
+
+
+def times_due(release: date) -> date:
+    """The day Vue should have published showtimes for a film opening on `release`: the Tuesday before (Vue puts
+    out each Tuesday the times for the week from Friday). Allow that day itself, so overdue means after it."""
+    return release - timedelta(days=((release.weekday() - 1) % 7) or 7)
+
+
+def times_overdue(release: date | None, has_times: bool, today: date) -> bool:
+    """A coming-soon film with no showtimes at your cinema after they were due: probably not showing there.
+    Re-checked at every refresh, so if times turn up later it's back in the running straight away."""
+    return bool(release and not has_times and today > times_due(release))
 
 
 def big_screen(kind: str, genres: list[str], formats: set[str], runtime: int | None) -> tuple[float, str]:
@@ -432,6 +446,8 @@ def make_plan(db: DB, s: Settings, now: datetime | None = None, model: TasteMode
         if v["label"] and f["kind"] == "film" and recent:
             item.reviews = {**v, "guardian_url": rv["guardian_url"] if rv else None}
         item.model_rating = round(pred.rating, 2) if meta else None
+        item.unconfirmed = f["kind"] == "film" and not fs
+        item.times_overdue = item.unconfirmed and times_overdue(release, False, today)
         item.wanted = f["film_id"] in wants
         item.extra = (f["kind"] != "film" and not on_wl and not item.wanted
                       and not (yours is None and rating >= model.mu + 0.75))
@@ -497,14 +513,15 @@ def make_plan(db: DB, s: Settings, now: datetime | None = None, model: TasteMode
     # the most in). Anything that can't fit before it's likely to leave becomes a paid trip.
     month_keys = [m.strftime("%Y-%m") for m in months]
     slots = [remaining] + [s.tickets] * (len(months) - 1)
+    overdue = {item.film_id for item, _, _ in base if item.times_overdue}
     for fid, mk in pins.items():
-        if mk in month_keys and fid not in dismissed:
+        if mk in month_keys and fid not in dismissed and fid not in overdue:
             slots[month_keys.index(mk)] -= 1
     wanted_free: dict[str, int] = {}
     wanted_paid: dict[str, int] = {}
     wanted_window: dict[str, list[int]] = {}
     for item, run, days in base:
-        if item.wanted and not is_used(item) and item.film_id not in pins:
+        if item.wanted and not is_used(item) and item.film_id not in pins and not item.times_overdue:
             win = [k for k in range(len(months)) if (a_ := availability(item, run, days, k)) and a_[0] >= 0.5]
             if win:
                 wanted_window[item.film_id] = win
@@ -520,7 +537,7 @@ def make_plan(db: DB, s: Settings, now: datetime | None = None, model: TasteMode
             elif wanted_window[fid][-1] == k:  # last chance and no free ticket left
                 wanted_paid[fid] = wanted_window[fid][0]  # go in the first month it's on, before it can leave
     wanted_outside = [order[fid].title for fid in wants if fid in order and fid not in wanted_window
-                      and not is_used(order[fid]) and fid not in pins]
+                      and not is_used(order[fid]) and fid not in pins and not order[fid].times_overdue]
 
     # Plan each month in turn. A film picked in an earlier month isn't picked again; pins and wanted films come
     # first, and any free tickets left go to the best recommendations.
@@ -533,14 +550,14 @@ def make_plan(db: DB, s: Settings, now: datetime | None = None, model: TasteMode
         ref = today if current else ms
         tickets = remaining if current else s.tickets
         key = ms.strftime("%Y-%m")
-        cands, opening, paid = [], [], []
+        cands, opening, paid, no_times = [], [], [], []
         for item, run, days in base:
             if item.film_id in taken or (item.tmdb_id and f"tmdb:{item.tmdb_id}" in taken):
                 continue
             here = availability(item, run, days, k)
             mine_free = wanted_free.get(item.film_id) == k
             mine_paid = wanted_paid.get(item.film_id) == k
-            if item.wanted and item.film_id not in pins and not (mine_free or mine_paid):
+            if item.wanted and item.film_id not in pins and not (mine_free or mine_paid) and not item.times_overdue:
                 continue  # a wanted film belongs to the month it was fitted into
             if here is None:
                 continue
@@ -562,6 +579,10 @@ def make_plan(db: DB, s: Settings, now: datetime | None = None, model: TasteMode
                 it.short_run = it.p_two_weeks < 0.25 and (release is None or release >= today - timedelta(days=7))
             it.opens_in_month = opens_here
             it.leaving = current and date.fromisoformat(it.est_end) <= today + timedelta(days=7)
+            if it.times_overdue:
+                it.pinned = it.paid_trip = False  # no times where they were due: listed, but never holds a ticket
+                no_times.append(it)
+                continue
             if mine_paid:
                 paid.append(it)
                 continue
@@ -601,7 +622,7 @@ def make_plan(db: DB, s: Settings, now: datetime | None = None, model: TasteMode
         home = home[:4]
         # Everything else, once each, in date order
         shown = {i.film_id for i in picks + worth + home}
-        everything = [i for i in rest if i.film_id not in shown]
+        everything = [i for i in rest if i.film_id not in shown] + no_times
         everything.sort(key=lambda i: (i.first_date or "", -(i.predicted or 0)))
         opening = [o for o in opening if o not in picks]
         opening.sort(key=lambda i: (i.first_date or "", -(i.predicted or 0)))

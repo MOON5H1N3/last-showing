@@ -60,6 +60,9 @@
   {% endif %}
 </section>
 
+{% if is_current and film_notices %}
+{% for n in film_notices %}<div class="notice{{ ' bad' if n.kind == 'gone' }}">{{ n.html }}</div>{% endfor %}
+{% endif %}
 {% set w = plan.get('wants') or {} %}
 {% if w.get('total') %}
 <div class="wantsum" style="margin-top:var(--space-6)">

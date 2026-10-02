@@ -161,7 +161,7 @@ class VueBot(discord.Client):
 
     # ---------- sending ----------
     async def send_alerts(self, messages: list[str]) -> bool:
-        """Break alerts: only when something stops working, or starts working again."""
+        """One DM per refresh, only when something changed: a pinned or wanted film lost or back, or a break alert."""
         try:
             user = await self.fetch_user(self.owner)
             await user.send("**Last Showing**\n" + "\n\n".join(messages))

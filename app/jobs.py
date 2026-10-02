@@ -8,7 +8,7 @@ import traceback
 from pathlib import Path
 from datetime import datetime, timedelta
 
-from . import alerts, letterboxd, reviews, tickets, vue
+from . import alerts, letterboxd, reviews, tickets, vue, watch
 from .config import Settings
 from .db import DB
 from .planner import make_plan
@@ -92,6 +92,7 @@ class Engine:
         s, db = self.s, self.db
         now = datetime.now(s.tz)
         report = {"started": now.isoformat(timespec="seconds"), "steps": [], "errors": []}
+        film_lines: list[str] = []  # pinned / wanted films that stopped or started holding a ticket
         tmdb = TMDB(s.tmdb_key, db) if s.tmdb_key else None
 
         async def step(name, coro_fn):
@@ -142,6 +143,10 @@ class Engine:
                             s.vue_cinema_name = next((c["name"] for c in cinemas if c["id"] == cid), "")
                     films = vue.parse(with_s, all_f)
                     vue.store(db, films, datetime.now(s.tz))
+                    try:
+                        film_lines.extend(watch.check(db, s.vue_cinema_name, datetime.now(s.tz)))
+                    except Exception as e:  # never let the watch break the listing
+                        log.warning("couldn't check your pinned films: %s", e)
                     showing = sum(1 for f in films if f.sessions)
                     return f"{len(films)} films listed ({showing} with showtimes)"
                 await step("Vue listings", do_vue)
@@ -288,7 +293,7 @@ class Engine:
         report["ok"] = not report["errors"]
         db.set("last_refresh", report)
         try:
-            messages = alerts.assess(db, report)
+            messages = film_lines + alerts.assess(db, report)  # one DM for the whole refresh
             if messages and self.notify:
                 await self.notify(messages)
         except Exception as e:  # an alert problem must never break the refresh
