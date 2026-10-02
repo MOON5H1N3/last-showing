@@ -97,6 +97,26 @@ def history_run(rm, today: date, release: date | None, first_seen: date | None, 
     return RunEstimate(end, "history", note, pfn)
 
 
+def published_until(films, sessions: dict, today: date) -> date | None:
+    """The last day of the week Vue has published times for: the most common last listed day among films already
+    open. (Not the latest showing of all: one advance preview or a Halloween re-release weeks away would make every
+    other film look as if it were leaving.)"""
+    lasts = []
+    for f in films:
+        rel = f["release_date"]
+        if f["kind"] != "film" or (rel and date.fromisoformat(rel) > today):
+            continue
+        days = [datetime.fromisoformat(r["start"]).date() for r in sessions.get(f["film_id"], [])]
+        if days:
+            lasts.append(max(days))
+    if not lasts:
+        return None
+    counts: dict[date, int] = {}
+    for d in lasts:
+        counts[d] = counts.get(d, 0) + 1
+    return max(counts, key=lambda d: (counts[d], d))
+
+
 def base_weeks(distributor: str) -> float:
     d = (distributor or "").lower()
     if any(m in d for m in MAJOR):
@@ -325,9 +345,7 @@ def make_plan(db: DB, s: Settings, now: datetime | None = None, model: TasteMode
     for r in sess_rows:
         sessions.setdefault(r["film_id"], []).append(r)
 
-    main_days = [datetime.fromisoformat(r["start"]).date() for f in films if f["kind"] == "film" and f["status"] == 1
-                 for r in sessions.get(f["film_id"], [])]
-    horizon = max(main_days) if main_days else None
+    horizon = published_until(films, sessions, today)
 
     ratings = {r["tmdb_id"]: r["rating"] for r in db.q("SELECT tmdb_id, rating FROM ratings")}
     watchlist = {r["tmdb_id"] for r in db.q("SELECT tmdb_id FROM watchlist")}
