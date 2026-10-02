@@ -22,12 +22,23 @@ def _list(name: str, default: str = "") -> list[str]:
     return [x.strip().lower() for x in _env(name, default).split(",") if x.strip()]
 
 
+# Vues near each cinema whose listings are also read each morning, to learn how long films last locally
+NEARBY = {"bristol-cribbs-causeway": "bristol-longwell-green,swindon,exeter,worcester",
+          "bristol-longwell-green": "bristol-cribbs-causeway,swindon,exeter,worcester"}
+
+
+def _nearby_default() -> list[str]:
+    slug = _env("VUE_CINEMA_SLUG", "bristol-cribbs-causeway")
+    return _list("NEARBY_VUES", NEARBY.get(slug, ""))
+
+
 @dataclass
 class Settings:
     # Cinema
     vue_cinema_slug: str = field(default_factory=lambda: _env("VUE_CINEMA_SLUG", "bristol-cribbs-causeway"))
     vue_cinema_id: str = field(default_factory=lambda: _env("VUE_CINEMA_ID", ""))  # auto-discovered if blank
     vue_cinema_name: str = field(default_factory=lambda: _env("VUE_CINEMA_NAME", ""))
+    nearby_cinemas: list[str] = field(default_factory=_nearby_default)  # slugs; listings only, never tickets
 
     # Tickets. Monzo Perks gives one Vue ticket a month.
     ticket_source: str = field(default_factory=lambda: _env("TICKET_SOURCE", "monzo"))  # monzo | custom | none
@@ -112,7 +123,7 @@ class Settings:
     EDITABLE = {
         "ticket_source": "choice:monzo,custom,none", "tickets_per_month": "int:0:10", "ticket_chain": "choice:vue",
         "ticket_rollover": "bool", "ticket_excluded_formats": "list",
-        "vue_cinema_slug": "slug", "vue_cinema_id": "text", "vue_cinema_name": "text",
+        "vue_cinema_slug": "slug", "vue_cinema_id": "text", "vue_cinema_name": "text", "nearby_cinemas": "list",
         "urgency_weight": "float:0:1", "favourite_weight": "float:0:2", "watchlist_boost": "float:0:1",
         "big_screen_weight": "float:0:1", "theme": "choice:system,dark,light",
         "include_events": "bool", "include_rereleases": "bool", "include_seen": "bool",

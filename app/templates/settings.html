@@ -90,6 +90,14 @@ input[type=range]{width:100%;accent-color:var(--marquee)}
     </select>
   </div>
   <div class="srow">
+    <div><label class="lab" for="nearby">Learn from nearby Vues</label><div class="help">Their listings are read each morning too, so Last Showing learns how long films last around you, not only in London. Nothing is planned there. Hold Ctrl to pick several.</div></div>
+    <div><input type="hidden" name="nearby_present" value="1">
+    <select id="nearby" name="nearby_cinemas" class="field" multiple size="6">
+      {% for c in cinemas if c.slug != s.vue_cinema_slug %}<option value="{{ c.slug }}" {% if c.slug in s.nearby_cinemas %}selected{% endif %}>Vue {{ c.name }}</option>{% endfor %}
+    </select>
+    {% set rh = run_sources or {} %}{% if rh.sites %}<div class="help" style="margin-top:6px">So far: {% for x in rh.sites %}{{ x.name }}, {{ x.finished }} finished run{{ 's' if x.finished != 1 }}{{ '; ' if not loop.last else '.' }}{% endfor %}</div>{% endif %}</div>
+  </div>
+  <div class="srow">
     <div><div class="lab">Also follow<span class="later">Later</span></div><div class="help">Other cinemas to watch for films worth paying for. Tickets are never planned there.</div></div>
     <button class="btn" type="button" disabled style="justify-self:start">Add a cinema</button>
   </div>

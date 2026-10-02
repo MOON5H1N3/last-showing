@@ -58,7 +58,7 @@
     {% endif %}
     {% if run_check and run_check.ok %}{% set h = run_check.horizons['30'] %}
     <div class="box"><h3>How long films stay on</h3>
-      <p class="muted small" style="margin:0 0 10px">Learned from {{ hist.films }} film runs at {{ (hist.sites or [])|length }} London Vues, {{ hist.first|dt('%d %b %Y') }} to {{ hist.last|dt('%d %b %Y') }}. Tested on {{ run_check.films_test }} films it hadn't seen.</p>
+      <p class="muted small" style="margin:0 0 10px">Learned from {{ hist.films }} film runs at {{ (hist.sites or [])|length }} London Vues, {{ hist.first|dt('%d %b %Y') }} to {{ hist.last|dt('%d %b %Y') }}{% if run_sources and run_sources.sites %}, plus Vues near you ({% for x in run_sources.sites %}{{ x.name }} {{ x.finished }}{{ ', ' if not loop.last }}{% endfor %} finished runs so far){% endif %}. The more local runs it has, the less London counts. Tested on {{ run_check.films_test }} films it hadn't seen.</p>
       <table class="tablemini"><thead><tr><th>It gave a month-long run</th><th>Came true</th><th>Cases</th></tr></thead><tbody>
       {% for b in h.calibration %}<tr><td>{{ b.predicted }}</td><td>{{ '%.0f'|format(b.came_true * 100) }}%</td><td>{{ b.cases }}</td></tr>{% endfor %}
       </tbody></table>
@@ -79,6 +79,19 @@
   </tbody></table>
   {% else %}
   <p class="lead">Nothing to compare yet. Since {{ (acc.since or today.isoformat())|dt('%d %B') }}, Last Showing has noted what it predicted for {{ acc.tracking }} films before you've seen them. When you rate one on Letterboxd, it shows up here next to the prediction, so you can see how good the guesses really are.</p>
+  {% endif %}
+</section>
+
+<section class="section">
+  <div class="rule"></div>
+  <h2 class="sec">How close were the run lengths?</h2>
+  {% if ra and ra.finished %}
+  <p class="lead">For {{ ra.finished }} film{{ 's' if ra.finished != 1 }} that finished at your cinema, its guesses were typically {{ ra.median_days_off }} day{{ 's' if ra.median_days_off != 1 }} out. {% if ra.early %}It said {{ ra.early }} would go sooner than they did{% endif %}{% if ra.early and ra.late %}, and {% elif ra.late %}It said {% endif %}{% if ra.late %}{{ ra.late }} would stay longer than they did{% endif %}{% if ra.early or ra.late %}.{% endif %}</p>
+  <table class="tablemini" style="max-width:720px"><thead><tr><th>Film</th><th>Guessed on</th><th>Said it would go</th><th>Really went</th></tr></thead><tbody>
+    {% for f in ra.films %}<tr><td>{{ f.title }}</td><td>{{ f.made_on|dt('%-d %b') }}</td><td>{{ f.predicted_end|dt('%-d %b') }}</td><td>{{ f.actual_end|dt('%-d %b') }}</td></tr>{% endfor %}
+  </tbody></table>
+  {% else %}
+  <p class="lead">Nothing to compare yet. Once a week Last Showing notes how long it thinks each film at your cinema has left{% if ra and ra.tracking %} ({{ ra.tracking }} film{{ 's' if ra.tracking != 1 }} so far){% endif %}. When a film's run ends, it shows up here next to the guess.</p>
   {% endif %}
 </section>
 

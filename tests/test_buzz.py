@@ -138,6 +138,9 @@ class ShortRuns:
     def median_remaining(self, idx):
         return 9
 
+    def local_share(self, idx):
+        return 0.0
+
 
 class TestShortRuns(unittest.TestCase):
     def test_short_runs_flagged(self):

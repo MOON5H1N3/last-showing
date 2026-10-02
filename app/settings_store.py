@@ -75,6 +75,8 @@ def from_form(form, cinemas: list[dict]) -> dict:
     for k, div in scale.items():
         if form.get(k) not in (None, ""):
             v[k] = float(form.get(k)) / div
+    if form.get("nearby_present"):
+        v["nearby_cinemas"] = form.getlist("nearby_cinemas") if hasattr(form, "getlist") else []
     slug = form.get("vue_cinema_slug")
     if slug:
         match = next((c for c in cinemas if c["slug"] == slug), None)

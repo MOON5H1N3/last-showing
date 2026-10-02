@@ -130,8 +130,10 @@ def parse_cinemas(resp: dict) -> list[dict]:
     return sorted(out, key=lambda c: c["name"] or "")
 
 
-async def fetch(slug: str, cinema_id: str = "", cinemas_out: list | None = None) -> tuple[str, dict, dict]:
-    """Returns (cinema_id, response_with_sessions, response_all_films). Fills `cinemas_out` with every Vue cinema."""
+async def fetch(slug: str, cinema_id: str = "", cinemas_out: list | None = None, nearby: list[str] | None = None,
+                nearby_out: dict | None = None) -> tuple[str, dict, dict]:
+    """Returns (cinema_id, response_with_sessions, response_all_films). Fills `cinemas_out` with every Vue cinema,
+    and `nearby_out` with {slug: {"name", "response"}} for each of the `nearby` cinemas' showtimes."""
     from .browser import browser_page
 
     async with browser_page() as page:
@@ -146,11 +148,25 @@ async def fetch(slug: str, cinema_id: str = "", cinemas_out: list | None = None)
         js = "u => fetch(u, {credentials: 'include'}).then(r => r.json())"
         with_s = await page.evaluate(js, API.format(cid=cinema_id, s="true"))
         all_f = await page.evaluate(js, API.format(cid=cinema_id, s="false"))
-        if cinemas_out is not None:
+        if cinemas_out is not None or nearby:
+            cinemas: list[dict] = []
             try:
-                cinemas_out.extend(parse_cinemas(await page.evaluate(js, BASE + "/api/microservice/showings/cinemas")))
+                cinemas = parse_cinemas(await page.evaluate(js, BASE + "/api/microservice/showings/cinemas"))
             except Exception as e:  # the list is a nice-to-have for the Settings page
                 log.warning("couldn't read Vue's cinema list: %s", e)
+            if cinemas_out is not None:
+                cinemas_out.extend(cinemas)
+            ids = {c["slug"]: c for c in cinemas}
+            for other in nearby or []:  # nearby Vues: showtimes only, to learn local run lengths
+                c = ids.get(other)
+                if not c or nearby_out is None:
+                    continue
+                try:
+                    r = await page.evaluate(js, API.format(cid=c["id"], s="true"))
+                    if (r or {}).get("result"):
+                        nearby_out[other] = {"name": c["name"], "response": r}
+                except Exception as e:  # one cinema failing never stops the rest
+                    log.warning("couldn't read Vue %s: %s", other, e)
     if (with_s or {}).get("responseCode") not in (0, None) or not (with_s or {}).get("result"):
         raise RuntimeError(f"Vue returned no listings (code {with_s.get('responseCode') if with_s else '?'})")
     return cinema_id, with_s, all_f

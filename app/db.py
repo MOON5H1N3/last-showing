@@ -42,6 +42,11 @@ CREATE TABLE IF NOT EXISTS predictions (
     tmdb_id INTEGER PRIMARY KEY, film_id TEXT, title TEXT, predicted REAL, fav_chance REAL, confidence TEXT,
     community REAL, recorded_on TEXT
 );
+-- How long it said each film had left, once a week while it's on, to check against what really happened
+CREATE TABLE IF NOT EXISTS run_predictions (
+    film_id TEXT, week TEXT, title TEXT, made_on TEXT, predicted_end TEXT, p14 REAL, basis TEXT, note TEXT,
+    PRIMARY KEY (film_id, week)
+);
 -- Early reviews (critics) for films at your cinema
 CREATE TABLE IF NOT EXISTS reviews (
     tmdb_id INTEGER PRIMARY KEY, imdb_id TEXT, rt INTEGER, metascore INTEGER, imdb_rating REAL,

@@ -165,16 +165,19 @@ def create_app(engine: Engine, bot=None) -> Starlette:
                       current_month=p.get("month"))
 
     async def taste_page(request: Request):
-        from .planner import accuracy_check, buzz_check
+        from .history import source_summary
+        from .planner import accuracy_check, buzz_check, run_accuracy
         return render("taste.html", request, "taste", run_check=db.get("run_check") or {},
                       hist=db.get("history_import") or {}, lb_import=db.get("letterboxd_import") or {},
-                      bc=buzz_check(db), acc=accuracy_check(db))
+                      bc=buzz_check(db), acc=accuracy_check(db), ra=run_accuracy(db, datetime.now(s.tz).date()),
+                      run_sources=source_summary(db))
 
     async def settings_page(request: Request):
         cinemas = db.get("vue_cinemas") or []
         if not any(c["slug"] == s.vue_cinema_slug for c in cinemas):
             cinemas = [{"id": s.vue_cinema_id, "name": s.vue_cinema_name or s.vue_cinema_slug, "slug": s.vue_cinema_slug}] + cinemas
-        return render("settings.html", request, "settings", cinemas=cinemas,
+        from .history import source_summary
+        return render("settings.html", request, "settings", cinemas=cinemas, run_sources=source_summary(db),
                       discord=db.get("discord_status") or {}, bot_ok=bool(bot and bot.is_ready()),
                       last=db.get("last_refresh") or {}, lb_import=db.get("letterboxd_import") or {},
                       rss=db.get("letterboxd_rss") or {}, hist=db.get("history_import") or {},

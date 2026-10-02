@@ -57,6 +57,45 @@ class RunEstimate:
         scale = {"known": 0.6, "listing": 1.5, "estimate": 6.0, "history": 6.0}[self.basis]
         return 1 / (1 + math.exp(-((self.end - on).days + 0.5) / scale))
 
+    def likely_range(self, start: date, horizon: int = 120) -> tuple[int, int | None]:
+        """Days from `start` during which it's likely still on (3 in 4) and still possibly on (1 in 4)."""
+        lo = hi = None
+        for d in range(horizon + 1):
+            p = self.p_showing(start + timedelta(days=d))
+            if lo is None and p < 0.75:
+                lo = d
+            if p < 0.25:
+                hi = d
+                break
+        return (lo if lo is not None else horizon), hi
+
+
+SURE_GONE = 0.25   # warn "Leaving soon" / "Short run" only when it's at least 3 in 4 likely to be gone
+
+
+def range_text(run: RunEstimate, today: date, opens: date | None) -> str:
+    """How long it's likely to have left, as an honest range rather than one date."""
+    start = max(today, opens) if opens else today
+    lo, hi = run.likely_range(start)
+    if run.basis == "known":
+        return ""
+    def wk(d: int) -> int:
+        return max(1, round(d / 7))
+
+    future = bool(opens and opens > today)
+
+    def weeks(text: str, n: int) -> str:  # "2 to 3" + plural, "more" now or "once it opens" later
+        unit = "week" if n == 1 else "weeks"
+        return f"{text} {unit} once it opens" if future else f"{text} more {unit}"
+    if hi is None:
+        return f"Probably on for at least {wk(lo)} week{'s' if wk(lo) != 1 else ''}" + (" once it opens" if future else "")
+    if hi <= 7:
+        return "Probably gone within a week" + (" of opening" if future else "")
+    a, b = wk(lo), wk(hi)
+    if a >= b:
+        return "Probably " + weeks(f"about {b}", b)
+    return "Probably " + weeks(f"{a} to {b}", b)
+
 
 def history_run(rm, today: date, release: date | None, first_seen: date | None, snaps: list, day_totals: dict,
                 latest_day: str | None, session_days: list[date] | None = None) -> RunEstimate | None:
@@ -94,7 +133,10 @@ def history_run(rm, today: date, release: date | None, first_seen: date | None, 
         weeks = max(0, round((end - today).days / 7))
         left = "under a week left" if weeks == 0 else f"about {weeks} more week{'s' if weeks != 1 else ''}"
         note = f"{week_in:.0f} week{'s' if round(week_in) != 1 else ''} in; similar films usually had {left} ({lasted} lasted another month)"
-    return RunEstimate(end, "history", note, pfn)
+    local = rm.local_share(idx)
+    base = ("from Vues near you" if local >= 0.7 else "from Vues near you and in London" if local >= 0.2
+            else "from London Vues")
+    return RunEstimate(end, "history", f"{note}. Based on similar films {base}", pfn)
 
 
 def published_until(films, sessions: dict, today: date) -> date | None:
@@ -207,6 +249,7 @@ class Item:
     reviews: dict = field(default_factory=dict)   # critics and audience verdicts, for you to judge (not scored)
     model_rating: float | None = None             # the model's own prediction, before your rating or watchlist boost
     p_two_weeks: float | None = None              # chance it's still on two weeks after its first showing here
+    run_range: str = ""                           # e.g. "Probably 2 to 4 more weeks": the honest range, not one date
     unconfirmed: bool = False                     # no showtimes at your cinema yet
     times_overdue: bool = False                   # ...and Vue has already put out that week's times: no ticket for it
 
@@ -500,7 +543,8 @@ def make_plan(db: DB, s: Settings, now: datetime | None = None, model: TasteMode
             opens = date.fromisoformat(item.release_date) if item.release_date else (days[0] if days else today)
             item.p_two_weeks = round(run.p_showing(max(opens, today) + timedelta(days=14)), 2)
             # most films at a multiplex last under three weeks, so only flag the unusually short
-            item.short_run = item.p_two_weeks < 0.25 and opens >= today - timedelta(days=7)
+            item.short_run = item.p_two_weeks < SURE_GONE * 0.6 and opens >= today - timedelta(days=7)
+            item.run_range = range_text(run, today, opens if opens > today else None)
 
     def availability(item: Item, run: RunEstimate, days: list[date], k: int) -> tuple[float, list[date], bool] | None:
         """Chance a film is showing during month k (None if it can't be), its days that month, and whether it
@@ -594,9 +638,9 @@ def make_plan(db: DB, s: Settings, now: datetime | None = None, model: TasteMode
             if item.kind == "film":
                 start = max(date.fromisoformat(it.first_date), today)
                 it.p_two_weeks = round(run.p_showing(start + timedelta(days=14)), 2)
-                it.short_run = it.p_two_weeks < 0.25 and (release is None or release >= today - timedelta(days=7))
+                it.short_run = it.p_two_weeks < SURE_GONE * 0.6 and (release is None or release >= today - timedelta(days=7))
             it.opens_in_month = opens_here
-            it.leaving = current and date.fromisoformat(it.est_end) <= today + timedelta(days=7)
+            it.leaving = current and run.p_showing(today + timedelta(days=7)) <= SURE_GONE
             if it.times_overdue:
                 it.pinned = it.paid_trip = False  # no times where they were due: listed, but never holds a ticket
                 no_times.append(it)
@@ -622,8 +666,9 @@ def make_plan(db: DB, s: Settings, now: datetime | None = None, model: TasteMode
         rest = [c for c in cands if c not in picks]
         leaving = []
         if current:
-            soon_cut = today + timedelta(days=10)
-            leaving = [i for i in rest if date.fromisoformat(i.est_end) <= soon_cut and (i.predicted or 0) >= model.mu]
+            runs = {b[0].film_id: b[1] for b in base}
+            leaving = [i for i in rest if runs[i.film_id].p_showing(today + timedelta(days=10)) <= SURE_GONE + 0.1
+                       and (i.predicted or 0) >= model.mu]
             leaving.sort(key=lambda i: i.est_end)
 
         # Worth paying for: the next best films as optional extras. Cinema first: any film you'd clearly enjoy
@@ -744,4 +789,58 @@ def accuracy_check(db: DB) -> dict:
         if crowd:
             out["crowd_error"] = round(sum(abs(f["rating"] - f["community"]) for f in crowd) / len(crowd), 2)
             out["crowd_films"] = len(crowd)
+    return out
+
+
+def record_runs(db: DB, plan: dict, today: date) -> int:
+    """Once a week per film while it's showing: how long it was predicted to have left. Kept to check later."""
+    week = (today - timedelta(days=today.weekday())).isoformat()
+    before = db.one("SELECT COUNT(*) n FROM run_predictions")["n"]
+    for f in (plan.get("films") or {}).values():
+        rel = f.get("release_date")
+        if f.get("kind") != "film" or not f.get("sessions") or (rel and rel > today.isoformat()):
+            continue  # only films already open here
+        db.x("""INSERT OR IGNORE INTO run_predictions(film_id,week,title,made_on,predicted_end,p14,basis,note)
+                VALUES(?,?,?,?,?,?,?,?)""",
+             (f["film_id"], week, f["title"], today.isoformat(), f["est_end"], (f.get("chances") or {}).get("14"),
+              f.get("end_basis"), f.get("end_note")))
+    return db.one("SELECT COUNT(*) n FROM run_predictions")["n"] - before
+
+
+def run_accuracy(db: DB, today: date | None = None) -> dict:
+    """Predicted run lengths against what really happened at your cinema, for films whose run has finished."""
+    today = today or date.today()
+    listed = set(db.get("vue_listed_film_ids", []))
+    last_show = {r["film_id"]: r["b"][:10] for r in db.q("SELECT film_id, MAX(start) b FROM sessions GROUP BY film_id")}
+    rows = db.q("SELECT * FROM run_predictions ORDER BY made_on")
+    tracking = len({r["film_id"] for r in rows})
+    by_film: dict[str, list] = {}
+    for r in rows:
+        end = last_show.get(r["film_id"])
+        if r["film_id"] in listed or not end or end > (today - timedelta(days=3)).isoformat():
+            continue  # still on
+        by_film.setdefault(r["film_id"], []).append((r, end))
+    cases, films = [], []
+    for fid, rs in by_film.items():
+        for r, end in rs:
+            made, actual = date.fromisoformat(r["made_on"]), date.fromisoformat(end)
+            cases.append({"gap": (date.fromisoformat(r["predicted_end"]) - actual).days, "p14": r["p14"],
+                          "lasted14": actual >= made + timedelta(days=14)})
+        r, end = rs[0]  # its first guess here
+        films.append({"title": r["title"], "film_id": fid, "made_on": r["made_on"], "predicted_end": r["predicted_end"],
+                      "actual_end": end, "gap": (date.fromisoformat(r["predicted_end"]) - date.fromisoformat(end)).days})
+    out = {"tracking": tracking, "finished": len(films), "since": rows[0]["made_on"] if rows else None,
+           "films": sorted(films, key=lambda f: f["actual_end"], reverse=True)[:15]}
+    if cases:
+        gaps = sorted(abs(c["gap"]) for c in cases)
+        out["median_days_off"] = gaps[len(gaps) // 2]
+        out["early"] = sum(1 for c in cases if c["gap"] < -3)   # said it would go sooner than it did
+        out["late"] = sum(1 for c in cases if c["gap"] > 3)     # said it would stay longer than it did
+        out["guesses"] = len(cases)
+        sure = [c for c in cases if c["p14"] is not None and c["p14"] >= 0.7]
+        doubt = [c for c in cases if c["p14"] is not None and c["p14"] <= 0.3]
+        if sure:
+            out["sure"] = {"cases": len(sure), "came_true": round(sum(c["lasted14"] for c in sure) / len(sure), 2)}
+        if doubt:
+            out["doubt"] = {"cases": len(doubt), "came_true": round(sum(c["lasted14"] for c in doubt) / len(doubt), 2)}
     return out

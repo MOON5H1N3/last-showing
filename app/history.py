@@ -112,6 +112,54 @@ def store_snapshot(db: DB, site: str, snap_day: date, info: dict, next7: dict) -
                      (site, snap_day.isoformat(), fid, next7[fid], total))
 
 
+LOCAL_PREFIX = "near:"  # sites read live from Vue each morning (nearby cinemas), vs the London archive
+
+
+def store_vue_listing(db: DB, slug: str, snap_day: date, films) -> int:
+    """One morning's listing at a nearby Vue (parsed VueFilms), in the same summary tables as the London archive."""
+    ensure_schema(db)
+    info, next7 = {}, {}
+    week_end = snap_day + timedelta(days=7)
+    for f in films:
+        if f.kind != "film" or not f.sessions:
+            continue
+        dates = {s.start.date() for s in f.sessions}
+        info[f.film_id] = {"tmdb_id": None, "title": f.title, "category": "movie",
+                           "release_date": f.release_date.isoformat() if f.release_date else None, "dates": dates}
+        next7[f.film_id] = sum(1 for s in f.sessions if snap_day <= s.start.date() < week_end)
+    store_snapshot(db, LOCAL_PREFIX + slug, snap_day, info, next7)
+    return len(info)
+
+
+def is_local(key: str) -> bool:
+    return key.startswith(LOCAL_PREFIX) or key.startswith("cribbs/")
+
+
+def source_summary(db: DB) -> dict:
+    """How much each source has contributed: London archive, each nearby Vue, and your own cinema."""
+    ensure_schema(db)
+    names = db.get("nearby_names") or {}
+    sites = []
+    for r in db.q("""SELECT site, COUNT(DISTINCT film_id) films, MIN(day) a, MAX(day) b FROM hist_snaps
+                     WHERE site LIKE ? GROUP BY site ORDER BY site""", (LOCAL_PREFIX + "%",)):
+        slug = r["site"][len(LOCAL_PREFIX):]
+        finished = sum(1 for s in _site_finished(db, r["site"]))
+        sites.append({"slug": slug, "name": names.get(slug, slug.replace("-", " ").title()), "films": r["films"],
+                      "finished": finished, "since": r["a"]})
+    return {"sites": sites}
+
+
+def _site_finished(db: DB, site: str):
+    last = db.one("SELECT MAX(day) d FROM hist_snaps WHERE site=?", (site,))["d"]
+    first = db.one("SELECT MIN(day) d FROM hist_snaps WHERE site=?", (site,))["d"]
+    if not last:
+        return []
+    last_d, first_d = date.fromisoformat(last), date.fromisoformat(first)
+    return [r for r in db.q("SELECT film_id, MIN(show_date) a, MAX(show_date) b FROM hist_dates WHERE site=? GROUP BY 1",
+                            (site,))
+            if date.fromisoformat(r["b"]) < last_d - timedelta(days=1) and date.fromisoformat(r["a"]) > first_d + timedelta(days=3)]
+
+
 async def import_history(db: DB, sites: list[str] | None = None, every_days: int = 3,
                          client: httpx.AsyncClient | None = None, progress=None) -> dict:
     """Downloads snapshots not yet imported. The first run takes a few minutes; later runs only fetch new ones."""
@@ -173,10 +221,10 @@ class State:
 def build_states(db: DB, cribbs: bool = True) -> list[State]:
     ensure_schema(db)
     states: list[State] = []
-    last_day = db.one("SELECT MAX(day) d FROM hist_snaps")["d"]
-    first_day = db.one("SELECT MIN(day) d FROM hist_snaps")["d"]
-    if last_day:
-        last_d, first_d = date.fromisoformat(last_day), date.fromisoformat(first_day)
+    # each source's own first and last record: the London archive and the nearby Vues started and stop at different times
+    bounds = {r["site"]: (date.fromisoformat(r["a"]), date.fromisoformat(r["b"]))
+              for r in db.q("SELECT site, MIN(day) a, MAX(day) b FROM hist_snaps GROUP BY site")}
+    if bounds:
         films = {(r["site"], r["film_id"]): r for r in db.q("SELECT * FROM hist_films WHERE category='movie'")}
         spans = {(r["site"], r["film_id"]): (date.fromisoformat(r["a"]), date.fromisoformat(r["b"]))
                  for r in db.q("SELECT site, film_id, MIN(show_date) a, MAX(show_date) b FROM hist_dates GROUP BY 1,2")}
@@ -187,6 +235,7 @@ def build_states(db: DB, cribbs: bool = True) -> list[State]:
             if k not in films or k not in spans:
                 continue
             first, last = spans[k]
+            first_d, last_d = bounds[k[0]]
             if first <= first_d + timedelta(days=3):
                 continue  # already running when records began: its start is unknown
             censored = last >= last_d - timedelta(days=1)  # still listed when the records end
@@ -230,10 +279,18 @@ def cribbs_states(db: DB) -> list[State]:
 class RunModel:
     """Nearest-neighbour look-up over past situations."""
 
+    LOCAL_FULL = 150  # finished local runs at which London counts for only a quarter
+
     def __init__(self, states: list[State], k: int = 60):
         self.states = states
         self.k = k
         self.n_films = len({s.key for s in states})
+        self.n_local = len({s.key for s in states if is_local(s.key) and not s.censored})
+        self.n_london = len({s.key for s in states if not is_local(s.key)})
+        # Lean on local runs as they build up: London counts fully at first, down to a quarter
+        self.london_weight = max(0.25, 1 - self.n_local / self.LOCAL_FULL)
+        self.local = np.array([is_local(s.key) for s in states], dtype=bool)
+        self.w = np.where(self.local, 1.0, self.london_weight) if states else np.zeros(0)
         if states:
             self.X = np.array([[s.week_in, math.log(max(s.share, 1e-3)), s.ratio] for s in states])
             self.scale = np.array([1.5, 0.6, 0.25])  # how far apart counts as "different" for each feature
@@ -254,14 +311,24 @@ class RunModel:
         return np.argsort(d)[: self.k]
 
     def p_still_showing(self, idx: np.ndarray, days_ahead: int) -> float:
-        rem, cens = self.rem[idx], self.cens[idx]
+        rem, cens, w = self.rem[idx], self.cens[idx], self.w[idx]
         known = ~cens | (rem >= days_ahead)  # a censored run only counts if it already lasted long enough
         if known.sum() < 5:
-            return float((rem >= days_ahead).mean()) if len(rem) else 0.5
-        return float((rem[known] >= days_ahead).mean())
+            known = np.ones(len(rem), dtype=bool)
+            if not len(rem):
+                return 0.5
+        return float(np.average(rem[known] >= days_ahead, weights=w[known]))
 
     def median_remaining(self, idx: np.ndarray) -> int:
-        return int(np.median(self.rem[idx]))
+        rem, w = self.rem[idx], self.w[idx]
+        order = np.argsort(rem)
+        cum = np.cumsum(w[order])
+        return int(rem[order][np.searchsorted(cum, cum[-1] / 2)])
+
+    def local_share(self, idx: np.ndarray) -> float:
+        """How much of an estimate came from Vues near you (and your own), rather than London."""
+        w = self.w[idx]
+        return float(w[self.local[idx]].sum() / w.sum()) if len(idx) and w.sum() else 0.0
 
     def estimate(self, today: date, release: date | None, week_in: float | None, share: float | None,
                  ratio: float | None):

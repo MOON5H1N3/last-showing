@@ -70,6 +70,7 @@
   </div>
   <div>
         <div class="sechead"><h2 class="sec">How long it'll be on</h2></div>
+    {% if f.run_range %}<p style="margin:0 0 6px;font-weight:600">{{ f.run_range }}.</p>{% endif %}
     <p class="muted small" style="margin:0 0 18px">{{ f.end_note }}.{% if f.short_run %} <strong style="color:var(--amber)">Likely a short run: go in its first week.</strong>{% endif %}</p>
     {% for d, label in [('7', 'Still on in a week'), ('14', 'Still on in two weeks'), ('30', 'Still on in a month')] %}
       {% set pc = (f.chances.get(d, 0) * 100)|round|int %}

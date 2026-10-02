@@ -8,7 +8,7 @@ import traceback
 from pathlib import Path
 from datetime import datetime, timedelta
 
-from . import alerts, letterboxd, reviews, tickets, vue, watch
+from . import alerts, history, letterboxd, reviews, tickets, vue, watch
 from .config import Settings
 from .db import DB
 from .planner import make_plan
@@ -74,12 +74,13 @@ class Engine:
             return "dev"
 
     def replan(self) -> dict:
-        from .planner import record_predictions
+        from .planner import record_predictions, record_runs
         p = make_plan(self.db, self.s)
         p["app_version"] = self._app_version()
         self.db.set("plan", p)
         try:
             record_predictions(self.db, p, datetime.now(self.s.tz).date())
+            record_runs(self.db, p, datetime.now(self.s.tz).date())
         except Exception as e:  # never let bookkeeping stop the plan
             log.warning("couldn't save predictions: %s", e)
         return p
@@ -134,8 +135,16 @@ class Engine:
             if vue_listings:
                 async def do_vue():
                     cinemas: list = []
+                    nearby: dict = {}
                     cid, with_s, all_f = await vue.fetch(s.vue_cinema_slug, s.vue_cinema_id or db.get("vue_cinema_id", ""),
-                                                         cinemas)
+                                                         cinemas, nearby=s.nearby_cinemas, nearby_out=nearby)
+                    if nearby:  # nearby Vues: kept only as run-length history, never planned
+                        names = db.get("nearby_names") or {}
+                        today_ = datetime.now(s.tz).date()
+                        for slug_, got in nearby.items():
+                            names[slug_] = got["name"]
+                            history.store_vue_listing(db, slug_, today_, vue.parse(got["response"]))
+                        db.set("nearby_names", names)
                     db.set("vue_cinema_id", cid)
                     if cinemas:
                         db.set("vue_cinemas", cinemas)
@@ -148,7 +157,8 @@ class Engine:
                     except Exception as e:  # never let the watch break the listing
                         log.warning("couldn't check your pinned films: %s", e)
                     showing = sum(1 for f in films if f.sessions)
-                    return f"{len(films)} films listed ({showing} with showtimes)"
+                    near = f"; {len(nearby)} nearby Vue{'s' if len(nearby) != 1 else ''} read" if s.nearby_cinemas else ""
+                    return f"{len(films)} films listed ({showing} with showtimes){near}"
                 await step("Vue listings", do_vue)
 
             if tmdb:
