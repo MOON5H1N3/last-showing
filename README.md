@@ -129,7 +129,7 @@ It stays quiet: nothing about recommendations, nothing repeated, a one-morning b
 
 ## Other apps
 
-`GET /api/seen` lists the films you've used tickets on and how many times you've watched each film in your Letterboxd diary, by TMDB id. It's read-only and asks for `DASHBOARD_PASSWORD` if you've set one. [Worth Keeping](https://github.com/MOON5H1N3/worth-keeping) uses it to rank films worth owning on disc.
+`GET /api/seen` lists the films you've used tickets on, every cinema trip from your Vue tickets (`trips`), and how many times you've watched each film in your Letterboxd diary, by TMDB id. It's read-only and asks for `DASHBOARD_PASSWORD` if you've set one. [Worth Keeping](https://github.com/MOON5H1N3/worth-keeping) uses it to rank films worth owning on disc.
 
 ## Troubleshooting
 

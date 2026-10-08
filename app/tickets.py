@@ -61,10 +61,15 @@ def auto_detect(db: DB, today: date, tickets_per_month: int = 2) -> list[dict]:
 
 def seen_feed(db: DB) -> dict:
     """What you've seen, for other apps (Worth Keeping uses it to rank films worth owning):
-    cinema trips from your tickets, and how often you've watched each film from your Letterboxd diary."""
+    Monzo tickets used, every cinema trip from your Vue tickets, and how often you've watched each film from your
+    Letterboxd diary."""
     tickets = [dict(r) for r in db.q(
         "SELECT tmdb_id, title, used_on FROM ticket_uses WHERE active=1 AND tmdb_id IS NOT NULL ORDER BY used_on")]
     diary = [dict(r) for r in db.q(
         "SELECT tmdb_id, MAX(title) AS title, MAX(year) AS year, COUNT(*) AS watches, MAX(rating) AS rating, "
         "MAX(watched_date) AS last FROM diary WHERE tmdb_id IS NOT NULL GROUP BY tmdb_id")]
-    return {"tickets": tickets, "diary": diary}
+    from .trips import ensure
+    ensure(db)
+    trips = [dict(r) for r in db.q(  # every film you went to the cinema for, from your Vue tickets (each once)
+        "SELECT tmdb_id, title, visited_on, kind FROM cinema_trips ORDER BY visited_on")]
+    return {"tickets": tickets, "diary": diary, "trips": trips}
