@@ -21,22 +21,25 @@
   {% endif %}
 {% endmacro %}
 
+{# Where a wanted film is going, in words: "October", "next free ticket (Nov)", "paid trip (Oct)" #}
+{% macro want_where(item) %}{% set mo = (item.want_month ~ '-01')|dt('%b') if item.want_month else '' %}{% if item.want_how == 'chosen' %}{{ (item.want_month ~ '-01')|dt('%B') }}{% if item.paid_trip %}, paid trip{% endif %}{% elif item.want_how == 'free' %}next free ticket ({{ mo }}){% elif item.want_how == 'paid' %}paid trip ({{ mo }}){% else %}next free ticket{% endif %}{% endmacro %}
+
+{# The one Want to see button. Not wanted: "☆ Want to see". Wanted: says where it's going, with Remove. #}
 {% macro want_btn(item, small=False) %}
   {% if item.wanted %}
-  <form class="inline" method="post" action="/unwant"><input type="hidden" name="film_id" value="{{ item.film_id }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn want on{{ ' small' if small }}" aria-pressed="true">★ Want to see</button></form>
+  <span class="wanted{{ ' small' if small }}"><span class="mono">★</span> Wanted: {{ want_where(item) }}</span>
+  <form class="inline" method="post" action="/unwant"><input type="hidden" name="film_id" value="{{ item.film_id }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn ghost{{ ' small' if small }}" aria-label="Remove {{ item.title }} from Want to see">Remove</button></form>
   {% else %}
-  <form class="inline" method="post" action="/want"><input type="hidden" name="film_id" value="{{ item.film_id }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn want{{ ' small' if small }}" aria-pressed="false">☆ Want to see</button></form>
+  <form class="inline" method="post" action="/want"><input type="hidden" name="film_id" value="{{ item.film_id }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn want{{ ' small' if small }}" aria-pressed="false" title="Gets the next free ticket before it's likely to leave">☆ Want to see</button></form>
   {% endif %}
 {% endmacro %}
 
-{% macro pin_dismiss(item, month_key, small=False, primary=False) %}
-  {% if item.pinned and not item.wanted %}
-  <form class="inline" method="post" action="/unpin"><input type="hidden" name="film_id" value="{{ item.film_id }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn{{ ' small' if small }}">Unpin</button></form>
-  {% elif not item.wanted %}
-  <form class="inline" method="post" action="/pin"><input type="hidden" name="film_id" value="{{ item.film_id }}"><input type="hidden" name="month" value="{{ month_key }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn{{ ' main' if primary }}{{ ' small' if small }}">I'm seeing this</button></form>
-  {% endif %}
-  <form class="inline" method="post" action="/dismiss"><input type="hidden" name="film_id" value="{{ item.film_id }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn ghost{{ ' small' if small }}">Not for me</button></form>
-{% endmacro %}
+{% macro hide_btn(item, small=False) %}<form class="inline" method="post" action="/dismiss"><input type="hidden" name="film_id" value="{{ item.film_id }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn ghost{{ ' small' if small }}" title="Never suggest it again (undo under Settings)">Hide this film</button></form>{% endmacro %}
+
+{% macro booked_btn(item) %}<form class="inline" method="post" action="/use"><input type="hidden" name="film_id" value="{{ item.film_id }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn main" title="Uses one of this month's tickets, then asks which showing">Booked: use a ticket</button></form>{% endmacro %}
+
+{# kept for older templates #}
+{% macro pin_dismiss(item, month_key, small=False, primary=False) %}{{ want_btn(item, small) }}{{ hide_btn(item, small) }}{% endmacro %}
 
 {% macro links(item) %}
   <span class="links">{% if item.trailer %}<a href="{{ item.trailer }}" target="_blank" rel="noopener">Trailer</a>{% endif %}{% if item.letterboxd_url %}<a href="{{ item.letterboxd_url }}" target="_blank" rel="noopener">Letterboxd</a>{% endif %}{% if item.vue_url %}<a href="{{ item.vue_url }}" target="_blank" rel="noopener">Vue</a>{% endif %}</span>
@@ -81,14 +84,15 @@
     <a class="fposter" href="/film/{{ p.film_id }}" {% if p.poster %}style="background-image:url('{{ p.poster }}')"{% endif %} aria-label="{{ p.title }}: film page"></a>
     <div class="fbody">
       {{ tags(p, ctx) }}
-      <div class="ftitlerow"><h3 class="ftitle"><a href="/film/{{ p.film_id }}">{{ p.title }}</a></h3>{{ want_star(p) }}</div>
+      <div class="ftitlerow"><h3 class="ftitle"><a href="/film/{{ p.film_id }}">{{ p.title }}</a></h3></div>
       <p class="finfo">{{ info(p) }}</p>
       {{ figures(p, is_current, month_name) }}
       {{ showtimes(p, 2) }}
       <div class="actions">
         {% set can_use = is_current and plan.tickets_total %}
-        {% if can_use %}<form class="inline" method="post" action="/use"><input type="hidden" name="film_id" value="{{ p.film_id }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn main">Used a ticket</button></form>{% endif %}
-        {{ pin_dismiss(p, month_key, primary=not can_use) }}
+        {% if can_use %}{{ booked_btn(p) }}{% endif %}
+        {{ want_btn(p) }}
+        {{ hide_btn(p) }}
       </div>
     </div>
   </article>
@@ -108,7 +112,7 @@
   </a>
 {% endmacro %}
 
-{% macro want_star(i) %}<form class="inline" method="post" action="{{ '/unwant' if i.wanted else '/want' }}"><input type="hidden" name="film_id" value="{{ i.film_id }}"><input type="hidden" name="next" value="{{ path }}"><button class="wantstar{{ ' on' if i.wanted }}" title="{{ 'On your Want to see list' if i.wanted else 'Want to see' }}" aria-label="{{ 'Remove from' if i.wanted else 'Add to' }} Want to see: {{ i.title }}" aria-pressed="{{ 'true' if i.wanted else 'false' }}">{{ '★' if i.wanted else '☆' }}</button></form>{% endmacro %}
+{% macro want_star(i) %}<form class="inline" method="post" action="{{ '/unwant' if i.wanted else '/want' }}"><input type="hidden" name="film_id" value="{{ i.film_id }}"><input type="hidden" name="next" value="{{ path }}"><button class="wantstar{{ ' on' if i.wanted }}" title="{{ ('Wanted: ' ~ want_where(i)|trim ~ '. Click to remove') if i.wanted else 'Want to see: gets the next free ticket before it is likely to leave' }}" aria-label="{{ 'Remove from' if i.wanted else 'Add to' }} Want to see: {{ i.title }}" aria-pressed="{{ 'true' if i.wanted else 'false' }}">{{ '★' if i.wanted else '☆' }}</button></form>{% endmacro %}
 
 {% macro row(i, when, note, ctx='') %}
   <div class="lrow">

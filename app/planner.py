@@ -29,7 +29,7 @@ MAJOR = ("disney", "warner", "universal", "sony", "paramount", "20th century")
 MID = ("studiocanal", "lionsgate", "entertainment film", "altitude", "signature", "sky", "black bear",
        "elevation", "focus", "eone", "vertigo", "searchlight", "a24")
 MONTHS_AHEAD = 3  # this month and the next two
-PLAN_VERSION = 10  # bump when the plan's shape changes, so a saved plan from an older version is rebuilt
+PLAN_VERSION = 11  # bump when the plan's shape changes, so a saved plan from an older version is rebuilt
 CONF_SHRINK = {"high": 1.0, "medium": 0.9, "low": 0.75, "none": 0.5}
 
 
@@ -249,6 +249,8 @@ class Item:
     reviews: dict = field(default_factory=dict)   # critics and audience verdicts, for you to judge (not scored)
     model_rating: float | None = None             # the model's own prediction, before your rating or watchlist boost
     p_two_weeks: float | None = None              # chance it's still on two weeks after its first showing here
+    want_month: str | None = None                 # Want to see: the month it's going in (chosen, or the next free ticket)
+    want_how: str = ""                            # chosen | free | paid | later (not showing in the next three months)
     run_range: str = ""                           # e.g. "Probably 2 to 4 more weeks": the honest range, not one date
     unconfirmed: bool = False                     # no showtimes at your cinema yet
     times_overdue: bool = False                   # ...and Vue has already put out that week's times: no ticket for it
@@ -602,6 +604,15 @@ def make_plan(db: DB, s: Settings, now: datetime | None = None, model: TasteMode
                 wanted_paid[fid] = wanted_window[fid][0]  # go in the first month it's on, before it can leave
     wanted_outside = [order[fid].title for fid in wants if fid in order and fid not in wanted_window
                       and not is_used(order[fid]) and fid not in pins and not order[fid].times_overdue]
+    for fid, it_ in order.items():  # where each wanted film is going, for the button that says so
+        if fid in pins:
+            it_.want_month, it_.want_how = pins[fid], "chosen"
+        elif fid in wanted_free:
+            it_.want_month, it_.want_how = month_keys[wanted_free[fid]], "free"
+        elif fid in wanted_paid:
+            it_.want_month, it_.want_how = month_keys[wanted_paid[fid]], "paid"
+        elif it_.wanted:
+            it_.want_how = "later"
 
     # Plan each month in turn. A film picked in an earlier month isn't picked again; pins and wanted films come
     # first, and any free tickets left go to the best recommendations.
@@ -662,6 +673,8 @@ def make_plan(db: DB, s: Settings, now: datetime | None = None, model: TasteMode
         over = pinned[max(0, tickets):]
         for c in over:
             c.paid_trip = True
+            if c.film_id in order:
+                order[c.film_id].paid_trip = True  # the film page says it's a paid trip
         paid += over
         picks = [c for c in cands if c not in over][:tickets]
         for p in picks + paid:

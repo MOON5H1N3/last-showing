@@ -76,6 +76,10 @@ async def main() -> None:
         log.warning(p)
     if not db.get("installed_month"):
         db.set("installed_month", datetime.now(s.tz).strftime("%Y-%m"))
+    # "I'm seeing this" and "Want to see" are one button now: a pinned film is a wanted film with its month chosen
+    db.x("""INSERT OR IGNORE INTO wants(film_id,tmdb_id,title,created_at)
+            SELECT p.film_id, v.tmdb_id, COALESCE(v.title, p.film_id), p.created_at
+            FROM pins p LEFT JOIN vue_films v ON v.film_id=p.film_id""")
     engine = Engine(s, db)
 
     bot = None

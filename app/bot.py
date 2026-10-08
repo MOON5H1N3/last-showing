@@ -91,19 +91,19 @@ class ShowingView(discord.ui.View):
 
 
 class PlanView(discord.ui.View):
-    """'Used a ticket' buttons. custom_ids are handled in on_interaction so they keep working after restarts."""
+    """Booked / Want to see / Hide this film buttons. custom_ids are handled in on_interaction so they keep working after restarts."""
 
     def __init__(self, plan: dict, dashboard_url: str):
         super().__init__(timeout=None)
         # one row per pick: used / seeing it / not for me (Discord allows 5 rows, the last is the dashboard link)
         for row, p in enumerate(plan.get("picks", [])[:4]):
             short = p["title"] if len(p["title"]) <= 40 else p["title"][:39] + "…"
-            self.add_item(discord.ui.Button(label=f"Used a ticket: {short}", style=discord.ButtonStyle.primary,
+            self.add_item(discord.ui.Button(label=f"Booked: {short}", style=discord.ButtonStyle.primary,
                                             custom_id=f"ls:use:{p['film_id']}"[:100], row=row))
-            if not p.get("pinned"):
-                self.add_item(discord.ui.Button(label="I'm seeing this", style=discord.ButtonStyle.secondary,
-                                                custom_id=f"ls:pin:{p['film_id']}"[:100], row=row))
-            self.add_item(discord.ui.Button(label="Not for me", style=discord.ButtonStyle.secondary,
+            if not p.get("wanted"):
+                self.add_item(discord.ui.Button(label="Want to see", style=discord.ButtonStyle.secondary,
+                                                custom_id=f"ls:want:{p['film_id']}"[:100], row=row))
+            self.add_item(discord.ui.Button(label="Hide this film", style=discord.ButtonStyle.secondary,
                                             custom_id=f"ls:nope:{p['film_id']}"[:100], row=row))
         if dashboard_url.startswith(("http://", "https://")):
             self.add_item(discord.ui.Button(label="Open dashboard", url=dashboard_url, row=4))
@@ -251,7 +251,9 @@ class VueBot(discord.Client):
         self.engine.db.x("INSERT OR REPLACE INTO pins(film_id,month,created_at) VALUES(?,?,?)",
                          (film_id, month, datetime.now().isoformat(timespec="seconds")))
         self.engine.replan()
-        return f"Pinned **{title}**: one of this month's tickets is kept for it."
+        self.engine.db.x("INSERT OR IGNORE INTO wants(film_id,title,created_at) VALUES(?,?,?)",
+                         (film_id, title, datetime.now().isoformat(timespec="seconds")))
+        return f"**{title}**: going this month, with one of this month's tickets (or a paid trip if they're used)."
 
     def _want(self, film_id: str) -> str:
         title, tid = self._film(film_id)
@@ -261,7 +263,7 @@ class VueBot(discord.Client):
         paid = len(w.get("paid") or [])
         tail = (f" You'd now need {paid} paid trip{'s' if paid != 1 else ''} to see everything you want."
                 if paid else " Your free tickets still cover everything you want to see.")
-        return f"**{title}** is on your Want to see list.{tail}"
+        return f"**{title}** added to Want to see: it gets the next free ticket before it's likely to leave.{tail}"
 
     def _dismiss(self, film_id: str) -> str:
         title, tid = self._film(film_id)
@@ -272,7 +274,7 @@ class VueBot(discord.Client):
         plan = self.engine.replan()
         nxt = plan.get("picks") or []
         tail = f" Your picks are now: {', '.join(p['title'] for p in nxt)}." if nxt else ""
-        return f"Got it, **{title}** won't be suggested again (you can bring it back on the dashboard).{tail}"
+        return f"**{title}** is hidden and won't be suggested again (bring it back under Settings).{tail}"
 
     def _use(self, film_id: str | None = None, title: str | None = None) -> str:
         db, s = self.engine.db, self.engine.s

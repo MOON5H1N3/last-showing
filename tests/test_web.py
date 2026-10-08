@@ -97,10 +97,23 @@ class TestWantAndPin(unittest.TestCase):
     def test_film_page_offers_the_right_months(self):
         c, s, db = client()
         page = c.get("/film/HO9").text  # Ebenezer opens in November
+        self.assertIn("☆ Want to see", page)
+        self.assertNotIn("I'm seeing this", page)  # one button now
+        self.assertNotIn('class="whenpick"', page)  # the month choice appears once it's wanted
+        c.post("/want", data={"film_id": "HO9", "next": "/film/HO9"})
+        page = c.get("/film/HO9").text
+        self.assertIn("Wanted: next free ticket", page)
+        self.assertIn('class="whenpick"', page)
         self.assertNotIn('value="2026-10"', page)
-        self.assertIn("2026-11", page)
+        self.assertIn('value="2026-11"', page)
         c.post("/pin", data={"film_id": "HO9", "month": "2026-11", "next": "/film/HO9"})
         self.assertEqual(db.one("SELECT month FROM pins WHERE film_id='HO9'")["month"], "2026-11")
+        self.assertIn("Wanted: November", c.get("/film/HO9").text)
+        c.post("/unpin", data={"film_id": "HO9", "next": "/film/HO9"})  # back to the next free ticket, still wanted
+        self.assertIsNotNone(db.one("SELECT 1 FROM wants WHERE film_id='HO9'"))
+        c.post("/pin", data={"film_id": "HO9", "month": "2026-11", "next": "/film/HO9"})
+        c.post("/unwant", data={"film_id": "HO9", "next": "/film/HO9"})  # Remove clears the month too
+        self.assertIsNone(db.one("SELECT 1 FROM pins WHERE film_id='HO9'"))
 
 
 class TestTheme(unittest.TestCase):

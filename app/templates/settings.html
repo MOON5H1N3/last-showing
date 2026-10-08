@@ -29,7 +29,7 @@ input[type=range]{width:100%;accent-color:var(--marquee)}
 {% block content %}
 <div class="setgrid">
 <nav class="sidenav" aria-label="Settings sections">
-  <a href="#tickets">Tickets</a><a href="#cinema">Cinema</a><a href="#appearance">Appearance</a><a href="#recs">Recommendations</a><a href="#reviews">Early reviews</a><a href="#letterboxd">Letterboxd</a><a href="#trips">Cinema trips</a><a href="#discord">Discord</a><a href="#data">Schedule and data</a><a href="#notforme">Not for me</a>
+  <a href="#tickets">Tickets</a><a href="#cinema">Cinema</a><a href="#appearance">Appearance</a><a href="#recs">Recommendations</a><a href="#reviews">Early reviews</a><a href="#letterboxd">Letterboxd</a><a href="#trips">Cinema trips</a><a href="#discord">Discord</a><a href="#data">Schedule and data</a><a href="#notforme">Hidden films</a>
 </nav>
 
 <div style="display:flex;flex-direction:column;gap:28px">
@@ -242,14 +242,14 @@ input[type=range]{width:100%;accent-color:var(--marquee)}
 </form>
 
 <section id="notforme" class="scard">
-  <div><div class="rule"></div><h2>Not for me</h2></div>
+  <div><div class="rule"></div><h2>Hidden films</h2></div>
   {% if plan.get('dismissed') %}
   <p class="help" style="margin:0">Films you've ruled out. They won't be suggested again.</p>
   <div class="list">{% for d in plan.dismissed %}
     <div class="lrow" style="grid-template-columns:minmax(0,1fr) auto"><span class="t">{{ d.title }}</span>
       <form class="inline" method="post" action="/undismiss"><input type="hidden" name="film_id" value="{{ d.film_id }}"><input type="hidden" name="next" value="/settings#notforme"><button class="btn small">Bring back</button></form></div>
   {% endfor %}</div>
-  {% else %}<p class="help" style="margin:0">Nothing ruled out. Use "Not for me" on any film to stop it being suggested.</p>{% endif %}
+  {% else %}<p class="help" style="margin:0">Nothing hidden. Use "Hide this film" on any film to stop it being suggested.</p>{% endif %}
 </section>
 </div>
 </div>

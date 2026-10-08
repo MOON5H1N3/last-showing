@@ -249,10 +249,16 @@ def create_app(engine: Engine, bot=None) -> Starlette:
         fid, month = form.get("film_id"), form.get("month")
         if not fid or not re.fullmatch(r"\d{4}-\d{2}", month or ""):
             return _back(form, "Couldn't pin that")
+        title, tid = _title(fid)
         db.x("INSERT OR REPLACE INTO pins(film_id,month,created_at) VALUES(?,?,?)",
              (fid, month, datetime.now().isoformat(timespec="seconds")))
-        engine.replan()
-        return _back(form, f"Pinned {_title(fid)[0]}. A ticket is kept for it.")
+        db.x("INSERT OR IGNORE INTO wants(film_id,tmdb_id,title,created_at) VALUES(?,?,?,?)",  # choosing a month = wanted
+             (fid, tid, title, datetime.now().isoformat(timespec="seconds")))
+        p = engine.replan()
+        name = datetime.strptime(month, "%Y-%m").strftime("%B")
+        paid = any(x["film_id"] == fid for m_ in p.get("months", []) if m_["month"] == month for x in m_.get("paid_trips", []))
+        return _back(form, f"{title}: going in {name}" + (f". {name}'s free tickets are used, so it's a paid trip" if paid
+                                                          else ", with one of that month's free tickets"))
 
     async def want(request: Request):
         form = await request.form()
@@ -263,19 +269,20 @@ def create_app(engine: Engine, bot=None) -> Starlette:
         db.x("INSERT OR REPLACE INTO wants(film_id,tmdb_id,title,created_at) VALUES(?,?,?,?)",
              (fid, tid, title, datetime.now().isoformat(timespec="seconds")))
         engine.replan()
-        return _back(form, f"{title} is on your Want to see list. It gets a free ticket first, or a paid trip if none fits.")
+        return _back(form, f"{title} added to Want to see. It gets the next free ticket before it's likely to leave")
 
     async def unwant(request: Request):
         form = await request.form()
         db.x("DELETE FROM wants WHERE film_id=?", (form.get("film_id"),))
+        db.x("DELETE FROM pins WHERE film_id=?", (form.get("film_id"),))
         engine.replan()
-        return _back(form, f"{_title(form.get('film_id'))[0]} is off your Want to see list")
+        return _back(form, f"{_title(form.get('film_id'))[0]} removed from Want to see")
 
     async def unpin(request: Request):
         form = await request.form()
         db.x("DELETE FROM pins WHERE film_id=?", (form.get("film_id"),))
         engine.replan()
-        return _back(form, f"Unpinned {_title(form.get('film_id'))[0]}")
+        return _back(form, f"{_title(form.get('film_id'))[0]}: back to the next free ticket")
 
     async def dismiss(request: Request):
         form = await request.form()

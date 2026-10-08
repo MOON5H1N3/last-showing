@@ -34,21 +34,19 @@
         <div class="muted small">{{ m.confidence(f.confidence) }}.{% if m.fav(f)|trim %} {{ m.fav(f) }}.{% endif %}</div></div>
     </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap">
-      {% if plan.tickets_total %}<form class="inline" method="post" action="/use"><input type="hidden" name="film_id" value="{{ f.film_id }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn main">Used a ticket</button></form>{% endif %}
-      {% if pinned_month %}
-      <form class="inline" method="post" action="/unpin"><input type="hidden" name="film_id" value="{{ f.film_id }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn">Unpin ({{ (pinned_month ~ '-01')|dt('%B') }})</button></form>
-      {% elif pin_months|length == 1 %}
-      <form class="inline" method="post" action="/pin"><input type="hidden" name="film_id" value="{{ f.film_id }}"><input type="hidden" name="month" value="{{ pin_months[0][0] }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn">I'm seeing this in {{ pin_months[0][1] }}</button></form>
-      {% elif pin_months %}
-      <form class="inline pinmonths" method="post" action="/pin" aria-label="I'm seeing this in">
-        <input type="hidden" name="film_id" value="{{ f.film_id }}"><input type="hidden" name="next" value="{{ path }}">
-        <span class="muted small">I'm seeing this in</span>
-        {% for key, name in pin_months %}<button class="btn small" name="month" value="{{ key }}">{{ name }}</button>{% endfor %}
-      </form>
-      {% endif %}
+      {% if plan.tickets_total %}{{ m.booked_btn(f) }}{% endif %}
       {{ m.want_btn(f) }}
-      <form class="inline" method="post" action="/dismiss"><input type="hidden" name="film_id" value="{{ f.film_id }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn ghost">Not for me</button></form>
+      {{ m.hide_btn(f) }}
     </div>
+    {% if f.wanted and pin_months %}
+    <form class="whenpick" method="post" action="/pin" aria-label="When are you going?">
+      <input type="hidden" name="film_id" value="{{ f.film_id }}"><input type="hidden" name="next" value="{{ path }}">
+      <span class="label">When</span>
+      <button class="btn small{{ ' on' if f.want_how != 'chosen' }}" formaction="/unpin" aria-pressed="{{ 'true' if f.want_how != 'chosen' else 'false' }}">Next free ticket</button>
+      {% for key, name in pin_months %}<button class="btn small{{ ' on' if f.want_how == 'chosen' and f.want_month == key }}" name="month" value="{{ key }}" aria-pressed="{{ 'true' if f.want_how == 'chosen' and f.want_month == key else 'false' }}">{{ name }}</button>{% endfor %}
+      <span class="muted small">{% if f.want_how == 'chosen' and f.paid_trip %}That month's free tickets are used, so it's a paid trip.{% elif f.want_how == 'chosen' %}Holds one of that month's free tickets, or a paid trip if they're used.{% else %}Pick a month to fix it there; if that month's free tickets are used, it's a paid trip.{% endif %}</span>
+    </form>
+    {% endif %}
     {{ m.links(f) }}
     {% for n in need_showing if n.film_id == f.film_id %}{{ m.showing_picker(n, path) }}{% endfor %}
   </div>
