@@ -29,7 +29,7 @@ MAJOR = ("disney", "warner", "universal", "sony", "paramount", "20th century")
 MID = ("studiocanal", "lionsgate", "entertainment film", "altitude", "signature", "sky", "black bear",
        "elevation", "focus", "eone", "vertigo", "searchlight", "a24")
 MONTHS_AHEAD = 3  # this month and the next two
-PLAN_VERSION = 9  # bump when the plan's shape changes, so a saved plan from an older version is rebuilt
+PLAN_VERSION = 10  # bump when the plan's shape changes, so a saved plan from an older version is rebuilt
 CONF_SHRINK = {"high": 1.0, "medium": 0.9, "low": 0.75, "none": 0.5}
 
 
@@ -577,8 +577,10 @@ def make_plan(db: DB, s: Settings, now: datetime | None = None, model: TasteMode
     slots = [remaining] + [s.tickets] * (len(months) - 1)
     overdue = {item.film_id for item, _, _ in base if item.times_overdue}
     for fid, mk in pins.items():
-        if mk in month_keys and fid not in dismissed and fid not in overdue:
-            slots[month_keys.index(mk)] -= 1
+        used_pin = fid in used_films or any(f"tmdb:{i.tmdb_id}" in used_films for i, _, _ in base
+                                            if i.film_id == fid and i.tmdb_id)
+        if mk in month_keys and fid not in dismissed and fid not in overdue and not used_pin:
+            slots[month_keys.index(mk)] -= 1  # a pin you've already used a ticket on isn't holding another
     wanted_free: dict[str, int] = {}
     wanted_paid: dict[str, int] = {}
     wanted_window: dict[str, list[int]] = {}
@@ -656,14 +658,19 @@ def make_plan(db: DB, s: Settings, now: datetime | None = None, model: TasteMode
         extras.sort(key=lambda i: (i.first_date or "", -(i.predicted or 0)))
         cands = [c for c in cands if c not in extras]
         pinned = [c for c in cands if c.pinned]
-        picks = (pinned + [c for c in cands if not c.pinned])[:max(tickets, len(pinned))]
+        # a pin beyond this month's free tickets is still going: a paid trip that month, not a ticket pick
+        over = pinned[max(0, tickets):]
+        for c in over:
+            c.paid_trip = True
+        paid += over
+        picks = [c for c in cands if c not in over][:tickets]
         for p in picks + paid:
             end = date.fromisoformat(p.est_end)
             p.watch_by = min(max(end, date.fromisoformat(p.first_date)), me).isoformat()
             taken.add(p.film_id)
         picks.sort(key=lambda p: p.watch_by)
         paid.sort(key=lambda p: p.watch_by)
-        rest = [c for c in cands if c not in picks]
+        rest = [c for c in cands if c not in picks and c not in over]
         leaving = []
         if current:
             runs = {b[0].film_id: b[1] for b in base}

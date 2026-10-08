@@ -97,7 +97,8 @@
 {% if mp.get('paid_trips') %}
 <section class="section">
   <div class="sechead"><h2 class="sec">Paid trips</h2><span class="count">{{ mp.paid_trips|length }} film{{ 's' if mp.paid_trips|length != 1 }}</span></div>
-  <p class="lead">On your Want to see list, but no free ticket fits before {{ 'it' if mp.paid_trips|length == 1 else 'they' }}'re likely to leave.</p>
+  {% set pinned_paid = mp.paid_trips|selectattr('pinned')|list %}
+  <p class="lead">{% if pinned_paid|length == mp.paid_trips|length %}You're seeing {{ 'it' if pinned_paid|length == 1 else 'them' }} this month, and your free tickets are already used.{% elif not pinned_paid %}On your Want to see list, but no free ticket fits before {{ 'it' if mp.paid_trips|length == 1 else 'they' }}'re likely to leave.{% else %}Films you're seeing this month once your free tickets are used, and Want to see films no free ticket fits before they're likely to leave.{% endif %}</p>
   <div class="list">{% for i in mp.paid_trips %}{{ m.row(i, m.when(i, is_current), ('Go by ' ~ (i.watch_by|dt('%a %-d %b')) ~ '. ' if i.watch_by else '') ~ (i.why or '')) }}{% endfor %}</div>
 </section>
 {% endif %}

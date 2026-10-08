@@ -112,3 +112,19 @@ class TestPlanUnconfirmed(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestPinOverAllowance(unittest.TestCase):
+    def test_pin_with_no_tickets_left_is_a_paid_trip(self):
+        from app.planner import make_plan
+        from tests.test_core import NOW, seeded_db, settings
+        db = seeded_db()
+        for fid in ("HO1", "HO2"):  # both of this month's tickets used
+            db.x("INSERT INTO ticket_uses(month,film_id,tmdb_id,title,used_on,source,active) "
+                 "VALUES('2026-10',?,NULL,?,'2026-10-01','dashboard',1)", (fid, fid))
+        db.x("INSERT INTO pins(film_id,month,created_at) VALUES('HO11','2026-10','2026-10-01')")
+        m = make_plan(db, settings(), NOW)["months"][0]
+        self.assertEqual(m["picks"], [])
+        paid = [i for i in m["paid_trips"] if i["film_id"] == "HO11"]
+        self.assertTrue(paid and paid[0]["paid_trip"])
+        self.assertNotIn("HO11", [i["film_id"] for i in m["everything"] + m["worth_paying"]])
