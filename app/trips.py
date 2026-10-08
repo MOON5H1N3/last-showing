@@ -1,7 +1,8 @@
-"""Cinema trips from your Vue tickets: what you actually chose to see on the big screen.
+"""Cinema trips: what you actually chose to see on the big screen.
 
-Vue has no export, so trips come in as lines of "date, film" (read from the Vue app's My tickets list). Each film is
-kept once, at its first visit. They're used to:
+They come in three ways: when you use a ticket (and pick the showing you booked, so the time, screen and format are
+known); from your Letterboxd diary, for a film that was showing at your cinema that day; and, for history, as lines
+of "date, film" read from the Vue app's My tickets list. Each film is kept once, at its first visit. They're used to:
 
 * count Monzo tickets for months Last Showing has been running (never past the month's allowance, and never a film
   you already counted or gave back);
@@ -10,8 +11,9 @@ kept once, at its first visit. They're used to:
 """
 from __future__ import annotations
 
+import json
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from . import tickets
 from .db import DB
@@ -27,10 +29,116 @@ CREATE TABLE IF NOT EXISTS cinema_trips (
 MONTHS = {m: i for i, m in enumerate(["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"], 1)}
 
 
+SHOWING_COLS = {"session_id": "TEXT", "start": "TEXT", "screen": "TEXT", "formats": "TEXT"}
+
+
 def ensure(db: DB) -> None:
     for stmt in SCHEMA.strip().split(";"):
         if stmt.strip():
             db.x(stmt)
+    have = {r["name"] for r in db.q("PRAGMA table_info(cinema_trips)")}
+    for col, kind in SHOWING_COLS.items():  # the showing you booked, when you picked it
+        if col not in have:
+            db.x(f"ALTER TABLE cinema_trips ADD COLUMN {col} {kind}")
+
+
+def _key(tmdb_id: int | None, title: str) -> str:
+    return f"tmdb:{tmdb_id}" if tmdb_id else f"title:{norm(clean_vue_title(title)[0])}"
+
+
+def record(db: DB, film_id: str | None, tmdb_id: int | None, title: str, visited: date, source: str,
+           cinema: str = "") -> bool:
+    """A trip, if this film isn't already one (each film once, at its first visit). True if it was added."""
+    ensure(db)
+    key = _key(tmdb_id, title)
+    if db.one("SELECT 1 FROM cinema_trips WHERE key=?", (key,)):
+        return False
+    kind = "film"
+    if film_id:
+        row = db.one("SELECT kind FROM vue_films WHERE film_id=?", (film_id,))
+        kind = (row["kind"] if row else None) or "film"
+    db.x("""INSERT INTO cinema_trips(key,title,tmdb_id,film_id,visited_on,cinema,kind,source,created_at)
+            VALUES(?,?,?,?,?,?,?,?,?)""", (key, clean_vue_title(title)[0], tmdb_id, film_id, visited.isoformat(), cinema,
+                                           kind, source, datetime.now().isoformat(timespec="seconds")))
+    if tmdb_id:
+        db.x("INSERT OR IGNORE INTO watched(tmdb_id) VALUES(?)", (tmdb_id,))
+    return True
+
+
+def showings(db: DB, film_id: str, today: date, back: int = 3, ahead: int = 21) -> list[dict]:
+    """Showings to choose from: the last few days (if you mark it afterwards) and the next three weeks."""
+    lo, hi = (today - timedelta(days=back)).isoformat(), (today + timedelta(days=ahead + 1)).isoformat()
+    last = (db.get("vue_last_listing") or "")[:10]
+    now = today.isoformat()
+    out = []
+    # a showing still to come must be in the latest listing (Vue drops cancelled ones); past ones were listed back then
+    for r in db.q("""SELECT session_id, start, screen, formats FROM sessions WHERE film_id=? AND start>=? AND start<?
+                     AND (start<? OR last_seen>=?) ORDER BY start""", (film_id, lo, hi, now, last)):
+        fmts = [f for f in json.loads(r["formats"] or "[]") if f]
+        when = datetime.fromisoformat(r["start"])
+        label = when.strftime("%a %-d %b, %H:%M") + (" · " + ", ".join(f.upper() if len(f) <= 4 else f.title()
+                                                                        for f in fmts) if fmts else "")
+        out.append({"session_id": r["session_id"], "start": r["start"], "screen": r["screen"], "formats": fmts,
+                    "label": label})
+    return out
+
+
+def set_showing(db: DB, session_id: str) -> dict | None:
+    """You picked the showing you booked: the trip gets its date, time, screen and format."""
+    ensure(db)
+    s = db.one("SELECT session_id, film_id, start, screen, formats FROM sessions WHERE session_id=?", (session_id,))
+    if not s:
+        return None
+    f = db.one("SELECT title, tmdb_id FROM vue_films WHERE film_id=?", (s["film_id"],))
+    title, tid = (f["title"], f["tmdb_id"]) if f else (s["film_id"], None)
+    when = datetime.fromisoformat(s["start"])
+    key = _key(tid, title)
+    trip = db.one("SELECT visited_on, start FROM cinema_trips WHERE key=?", (key,))
+    if not trip:
+        record(db, s["film_id"], tid, title, when.date(), "ticket")
+    elif trip["visited_on"][:7] != when.strftime("%Y-%m") and trip["start"]:
+        return None  # a film you went to long ago keeps its first visit
+    db.x("UPDATE cinema_trips SET visited_on=?, session_id=?, start=?, screen=?, formats=?, film_id=? WHERE key=?",
+         (when.date().isoformat(), s["session_id"], s["start"], s["screen"], s["formats"], s["film_id"], key))
+    return {"title": clean_vue_title(title)[0], "label": when.strftime("%a %-d %b, %H:%M"), "screen": s["screen"]}
+
+
+def need_showing(db: DB, today: date) -> list[dict]:
+    """Tickets used this month on a film whose showing you haven't picked yet, and whose times are now listed."""
+    ensure(db)
+    out = []
+    for u in db.q("SELECT film_id, tmdb_id, title FROM ticket_uses WHERE month=? AND active=1 AND film_id IS NOT NULL",
+                  (today.strftime("%Y-%m"),)):
+        trip = db.one("SELECT start FROM cinema_trips WHERE key=?", (_key(u["tmdb_id"], u["title"]),))
+        if trip and trip["start"]:
+            continue
+        opts = showings(db, u["film_id"], today)
+        if opts:
+            out.append({"film_id": u["film_id"], "title": clean_vue_title(u["title"])[0], "showings": opts})
+    return out
+
+
+def forget_ticket_trip(db: DB, film_id: str | None, tmdb_id: int | None, title: str, month: str) -> None:
+    """You gave a ticket back: drop the trip it made, unless it came from somewhere else (diary, your Vue tickets)."""
+    ensure(db)
+    db.x("DELETE FROM cinema_trips WHERE key=? AND source='ticket' AND substr(visited_on,1,7)=?",
+         (_key(tmdb_id, title), month))
+
+
+def from_diary(db: DB, since: date, cinema: str = "") -> list[str]:
+    """Backstop: a diary entry for a film that was showing at your cinema that day (or the day either side) is a trip."""
+    ensure(db)
+    added = []
+    for e in db.q("SELECT tmdb_id, title, watched_date FROM diary WHERE tmdb_id IS NOT NULL AND watched_date>=?",
+                  (since.isoformat(),)):
+        wd = date.fromisoformat(e["watched_date"])
+        lo, hi = (wd - timedelta(days=1)).isoformat(), (wd + timedelta(days=2)).isoformat()
+        for f in db.q("SELECT film_id, title FROM vue_films WHERE tmdb_id=?", (e["tmdb_id"],)):
+            if db.one("SELECT 1 FROM sessions WHERE film_id=? AND start>=? AND start<?", (f["film_id"], lo, hi)):
+                if record(db, f["film_id"], e["tmdb_id"], f["title"], wd, "letterboxd", cinema):
+                    added.append(clean_vue_title(f["title"])[0])
+                break
+    return added
 
 
 def parse_date(text: str) -> date | None:

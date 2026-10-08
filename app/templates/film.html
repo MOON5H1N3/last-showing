@@ -50,6 +50,7 @@
       <form class="inline" method="post" action="/dismiss"><input type="hidden" name="film_id" value="{{ f.film_id }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn ghost">Not for me</button></form>
     </div>
     {{ m.links(f) }}
+    {% for n in need_showing if n.film_id == f.film_id %}{{ m.showing_picker(n, path) }}{% endfor %}
   </div>
 </section>
 

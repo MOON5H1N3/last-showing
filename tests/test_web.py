@@ -134,3 +134,18 @@ class TestTripsPage(unittest.TestCase):
         page = c.get("/settings").text
         self.assertIn("Cinema trips", page)
         self.assertIn("1 film since July 2023", page)
+
+
+class TestPickShowing(unittest.TestCase):
+    def test_use_then_pick_showing(self):
+        c, s, db = client()
+        db.set("vue_last_listing", "2099-01-01T06:00:00")  # every listed showing is current
+        db.x("UPDATE sessions SET start=datetime('now','+2 days'), last_seen='2099-01-01T07:00:00' WHERE film_id='HO2'")
+        r = c.post("/use", data={"film_id": "HO2", "next": "/"}, follow_redirects=False)
+        self.assertTrue(r.headers["location"].endswith("#showing"))
+        self.assertIn("msg=Ticket+used", r.headers["location"])
+        self.assertIn("Which showing did you book", c.get("/").text)
+        sid = db.one("SELECT session_id FROM sessions WHERE film_id='HO2'")["session_id"]
+        c.post("/showing", data={"session_id": sid, "next": "/"})
+        self.assertNotIn("Which showing did you book", c.get("/").text)
+        self.assertIsNotNone(db.one("SELECT start FROM cinema_trips WHERE film_id='HO2' AND start IS NOT NULL"))

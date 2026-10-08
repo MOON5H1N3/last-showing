@@ -290,6 +290,13 @@ class Engine:
                 return f"auto-marked {len(added)}: " + ", ".join(a["title"] for a in added) if added else "no new cinema trips in your diary"
             await step("Ticket auto-detect", do_tickets)
 
+            async def do_trips():
+                from . import trips
+                since = datetime.strptime(db.get("installed_month") or now.strftime("%Y-%m"), "%Y-%m").date()
+                added = trips.from_diary(db, since, s.vue_cinema_name)
+                return ("from your diary: " + ", ".join(added)) if added else "no new trips in your diary"
+            await step("Cinema trips", do_trips)
+
             # 8. plan
             async def do_plan():
                 p = self.replan()

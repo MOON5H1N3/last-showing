@@ -11,6 +11,8 @@ def month_of(d: date) -> str:
 
 
 def add_use(db: DB, film_id: str | None, tmdb_id: int | None, title: str, used_on: date, source: str) -> int:
+    from . import trips  # a ticket used is a cinema trip; the showing is picked afterwards
+    trips.record(db, film_id, tmdb_id, title, used_on, "ticket" if source in ("dashboard", "discord") else source)
     return db.x("""INSERT INTO ticket_uses(month,film_id,tmdb_id,title,used_on,source,active,created_at)
                    VALUES(?,?,?,?,?,?,1,?)""",
                 (month_of(used_on), film_id, tmdb_id, title, used_on.isoformat(), source,
@@ -19,7 +21,11 @@ def add_use(db: DB, film_id: str | None, tmdb_id: int | None, title: str, used_o
 
 def undo_use(db: DB, use_id: int) -> None:
     # kept (inactive) rather than deleted, so auto-detect won't re-add something you removed
+    from . import trips
+    row = db.one("SELECT * FROM ticket_uses WHERE id=?", (use_id,))
     db.x("UPDATE ticket_uses SET active=0 WHERE id=?", (use_id,))
+    if row:
+        trips.forget_ticket_trip(db, row["film_id"], row["tmdb_id"], row["title"], row["month"])
 
 
 def undo_latest(db: DB, month: str) -> dict | None:

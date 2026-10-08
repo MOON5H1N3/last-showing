@@ -79,3 +79,53 @@ class TestTrips(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def _cinema(db):
+    db.set("vue_last_listing", "2026-10-08T06:00:00")
+    db.x("""INSERT INTO vue_films(film_id,title,release_date,status,kind,tmdb_id,first_seen,last_seen)
+            VALUES('HO7','The Social Reckoning','2026-10-09',1,'film',77,'2026-10-01','2026-10-08')""")
+    for sid, start, fmts in (("S1", "2026-10-09T19:45:00", '["epic"]'), ("S2", "2026-10-10T17:00:00", "[]"),
+                             ("S0", "2026-10-06T19:00:00", "[]")):
+        db.x("""INSERT INTO sessions(session_id,film_id,start,screen,formats,sold_out,booking_url,first_seen,last_seen)
+                VALUES(?,?,?,?,?,0,'',?,?)""", (sid, "HO7", start, "Screen 1", fmts, "2026-10-01T06:00:00",
+                                                "2026-10-06T06:00:00" if sid == "S0" else "2026-10-08T06:00:00"))
+
+
+class TestShowings(unittest.TestCase):
+    def test_use_then_pick(self):
+        from app import tickets
+        db = DB(":memory:")
+        _cinema(db)
+        today = date(2026, 10, 8)
+        use = tickets.add_use(db, "HO7", 77, "The Social Reckoning", today, "dashboard")
+        self.assertEqual(db.one("SELECT source FROM cinema_trips WHERE key='tmdb:77'")["source"], "ticket")
+        opts = trips.showings(db, "HO7", today)
+        self.assertEqual([o["session_id"] for o in opts], ["S0", "S1", "S2"])  # a past one counts: marked afterwards
+        self.assertEqual(opts[1]["label"], "Fri 9 Oct, 19:45 · EPIC")
+        self.assertEqual([n["film_id"] for n in trips.need_showing(db, today)], ["HO7"])
+        got = trips.set_showing(db, "S1")
+        self.assertEqual(got["label"], "Fri 9 Oct, 19:45")
+        t = db.one("SELECT * FROM cinema_trips WHERE key='tmdb:77'")
+        self.assertEqual((t["visited_on"], t["formats"], t["screen"]), ("2026-10-09", '["epic"]', "Screen 1"))
+        self.assertEqual(trips.need_showing(db, today), [])
+        tickets.undo_use(db, use)  # giving the ticket back drops the trip it made
+        self.assertIsNone(db.one("SELECT 1 FROM cinema_trips WHERE key='tmdb:77'"))
+
+    def test_no_times_yet(self):
+        from app import tickets
+        db = DB(":memory:")
+        _cinema(db)
+        db.x("DELETE FROM sessions")
+        tickets.add_use(db, "HO7", 77, "The Social Reckoning", date(2026, 10, 8), "dashboard")
+        self.assertEqual(trips.need_showing(db, date(2026, 10, 8)), [])  # nothing to pick yet: asked later
+
+    def test_diary_backstop(self):
+        db = DB(":memory:")
+        _cinema(db)
+        db.x("INSERT INTO diary(entry_key,tmdb_id,title,year,watched_date,rating,rewatch,source) "
+             "VALUES('d1',77,'The Social Reckoning',2026,'2026-10-10',4.0,0,'rss')")
+        db.x("INSERT INTO diary(entry_key,tmdb_id,title,year,watched_date,rating,rewatch,source) "
+             "VALUES('d2',99,'Something at home',2020,'2026-10-10',3.0,0,'rss')")
+        self.assertEqual(trips.from_diary(db, date(2026, 9, 1), "Cribbs"), ["The Social Reckoning"])
+        self.assertEqual(trips.from_diary(db, date(2026, 9, 1), "Cribbs"), [])  # once

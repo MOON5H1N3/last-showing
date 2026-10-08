@@ -14,7 +14,7 @@ from datetime import date, datetime
 import discord
 from discord import app_commands
 
-from . import tickets
+from . import tickets, trips
 from .jobs import Engine
 
 log = logging.getLogger(__name__)
@@ -78,6 +78,16 @@ def plan_embeds(plan: dict, dashboard_url: str) -> list[discord.Embed]:
         e.add_field(name="Looking ahead", inline=False, value="\n".join(
             f"{m['month_name']}: " + ", ".join(i["title"] for i in m["picks"][:3]) for m in ahead))
     return [e]
+
+
+class ShowingView(discord.ui.View):
+    """'Which showing did you book?': one button per listed showing (custom_ids handled in on_interaction)."""
+
+    def __init__(self, options: list[dict]):
+        super().__init__(timeout=None)
+        for i, o in enumerate(options[:20]):
+            self.add_item(discord.ui.Button(label=o["label"][:80], style=discord.ButtonStyle.secondary,
+                                            custom_id=f"ls:show:{o['session_id']}"[:100], row=i // 5))
 
 
 class PlanView(discord.ui.View):
@@ -202,7 +212,15 @@ class VueBot(discord.Client):
             return
         _, action, film_id = cid.split(":", 2)
         if action == "use":
-            msg = self._use(film_id=film_id)
+            msg, view = self._use(film_id=film_id), self._showing_view(film_id)
+            await interaction.response.send_message(msg, **({"view": view} if view else {}))
+            return
+        elif action == "show":
+            got = trips.set_showing(self.engine.db, film_id)  # here the id is the showing's
+            await interaction.response.send_message(
+                f"Noted: **{got['title']}**, {got['label']}" + (f", {got['screen']}." if got.get("screen") else ".")
+                if got else "That showing isn't listed any more.")
+            return
         elif action == "pin":
             msg = self._pin(film_id)
         elif action == "want":
@@ -212,6 +230,16 @@ class VueBot(discord.Client):
         else:
             return
         await interaction.response.send_message(msg)
+
+    def _showing_view(self, film_id: str | None) -> "ShowingView | None":
+        """After a ticket is used: the showings to pick from, if Vue has listed any yet (else the dashboard asks later)."""
+        if not film_id:
+            return None
+        db = self.engine.db
+        if not db.one("SELECT 1 FROM ticket_uses WHERE film_id=? AND active=1", (film_id,)):
+            return None
+        opts = trips.showings(db, film_id, datetime.now(self.engine.s.tz).date())
+        return ShowingView(opts) if opts else None
 
     def _film(self, film_id: str) -> tuple[str, int | None]:
         row = self.engine.db.one("SELECT title, tmdb_id FROM vue_films WHERE film_id=?", (film_id,))
@@ -264,7 +292,9 @@ class VueBot(discord.Client):
         left = plan.get("tickets_left", 0)
         nxt = plan.get("picks") or []
         tail = f" Next up: **{nxt[0]['title']}**, see by {_d(nxt[0].get('watch_by'))}." if left and nxt else ""
-        return f"Ticket used on **{title}**. {left} left this month.{tail}"
+        ask = (" Which showing did you book?" if trips.showings(db, film_id, today) else
+               " I'll ask which showing you booked once Vue lists it.") if film_id else ""
+        return f"Ticket used on **{title}**. {left} left this month.{tail}{ask}"
 
     # ---------- slash commands ----------
     def _register(self):
@@ -300,7 +330,8 @@ class VueBot(discord.Client):
                 return
             known = bot.engine.db.one("SELECT 1 FROM vue_films WHERE film_id=?", (film,))
             msg = bot._use(film_id=film) if known else bot._use(title=film)
-            await interaction.response.send_message(msg)
+            view = bot._showing_view(film) if known else None
+            await interaction.response.send_message(msg, **({"view": view} if view else {}))
 
         @_everywhere
         @self.tree.command(name="undo", description="Give back the last ticket you marked as used")

@@ -122,3 +122,8 @@
 {# kept for older templates: the reviews verdict is now shown as figures, not a badge #}
 {% macro review_badge(i) %}{% endmacro %}
 {% macro flags(i) %}{{ tags(i) }}{% endmacro %}
+
+
+{# "Which showing did you book?" after a ticket is used: one button per listed showing #}
+{% macro showing_picker(n, path) %}<div class="notice" id="showing"><strong>Which showing did you book for {{ n.title }}?</strong> <span class="muted small">So Last Showing knows the time, screen and format.</span>
+  <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px">{% for o in n.showings[:24] %}<form class="inline" method="post" action="/showing"><input type="hidden" name="session_id" value="{{ o.session_id }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn small" style="font-family:var(--mono)">{{ o.label }}</button></form>{% endfor %}</div></div>{% endmacro %}

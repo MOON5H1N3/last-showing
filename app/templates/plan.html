@@ -60,6 +60,7 @@
   {% endif %}
 </section>
 
+{% if is_current %}{% for n in need_showing %}{{ m.showing_picker(n, path) }}{% endfor %}{% endif %}
 {% if is_current and film_notices %}
 {% for n in film_notices %}<div class="notice{{ ' bad' if n.kind == 'gone' }}">{{ n.html }}</div>{% endfor %}
 {% endif %}

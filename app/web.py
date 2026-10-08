@@ -20,7 +20,7 @@ from starlette.responses import (FileResponse, HTMLResponse, JSONResponse, Plain
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
-from . import settings_store, tickets, watch
+from . import settings_store, tickets, trips, watch
 from .jobs import Engine
 
 log = logging.getLogger(__name__)
@@ -72,8 +72,9 @@ def _back(form, msg: str, default: str = "/") -> RedirectResponse:
     nxt = form.get("next") or default
     if not nxt.startswith("/") or nxt.startswith("//"):
         nxt = default
+    nxt, _, frag = nxt.partition("#")  # the message goes before any #section, so the browser keeps it
     sep = "&" if "?" in nxt else "?"
-    return RedirectResponse(f"{nxt}{sep}msg=" + msg.replace(" ", "+"), 303)
+    return RedirectResponse(f"{nxt}{sep}msg=" + msg.replace(" ", "+") + (f"#{frag}" if frag else ""), 303)
 
 
 class BasicAuth(BaseHTTPMiddleware):
@@ -115,6 +116,7 @@ def create_app(engine: Engine, bot=None) -> Starlette:
         ctx = dict(
             plan=p, s=s, today=today, page=page, busy=engine.busy, step=engine.running_step,
             msg=request.query_params.get("msg", ""), problems=s.problems(), open_alerts=db.get("alerts_open") or {},
+            need_showing=trips.need_showing(db, today),
             film_notices=[{**n, "html": Markup(re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", str(escape(n["text"]))))}
                           for n in watch.current_notices(db, today)],
             cinema_name=s.vue_cinema_name or s.vue_cinema_slug.replace("-", " ").title(),
@@ -222,8 +224,19 @@ def create_app(engine: Engine, bot=None) -> Starlette:
             return _back(form, "Pick a film first")
         used_on = form.get("used_on") or datetime.now(s.tz).date().isoformat()
         tickets.add_use(db, film_id, tmdb_id, title, date.fromisoformat(used_on), "dashboard")
-        engine.replan()
-        return _back(form, f"Ticket used on {title}")
+        p = engine.replan()
+        if film_id and trips.showings(db, film_id, datetime.now(s.tz).date()):
+            # straight on to "which showing did you book?"
+            where = f"/film/{film_id}" if film_id in (p.get("films") or {}) else "/"
+            return _back({"next": where + "#showing"}, f"Ticket used on {title}. Which showing did you book?")
+        return _back(form, f"Ticket used on {title}. Pick the showing once Vue lists it")
+
+    async def showing(request: Request):
+        form = await request.form()
+        got = trips.set_showing(db, form.get("session_id") or "")
+        if not got:
+            return _back(form, "That showing isn't listed any more")
+        return _back(form, f"Noted: {got['title']}, {got['label']}" + (f", {got['screen']}" if got.get("screen") else ""))
 
     async def undo(request: Request):
         form = await request.form()
@@ -310,7 +323,6 @@ def create_app(engine: Engine, bot=None) -> Starlette:
 
     async def trips_import(request: Request):
         """Cinema trips from your Vue tickets: lines of 'date, film'."""
-        from . import trips
         from .tmdb import TMDB
         form = await request.form()
         rows, bad = trips.parse_lines(form.get("trips") or "")
@@ -383,6 +395,7 @@ def create_app(engine: Engine, bot=None) -> Starlette:
         Route("/settings", settings_save, methods=["POST"]),
         Route("/use", use, methods=["POST"]),
         Route("/undo", undo, methods=["POST"]),
+        Route("/showing", showing, methods=["POST"]),
         Route("/pin", pin, methods=["POST"]),
         Route("/unpin", unpin, methods=["POST"]),
         Route("/want", want, methods=["POST"]),
