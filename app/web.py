@@ -177,7 +177,9 @@ def create_app(engine: Engine, bot=None) -> Starlette:
         if not any(c["slug"] == s.vue_cinema_slug for c in cinemas):
             cinemas = [{"id": s.vue_cinema_id, "name": s.vue_cinema_name or s.vue_cinema_slug, "slug": s.vue_cinema_slug}] + cinemas
         from .history import source_summary
+        from .trips import summary as trips_summary
         return render("settings.html", request, "settings", cinemas=cinemas, run_sources=source_summary(db),
+                      trips=trips_summary(db),
                       discord=db.get("discord_status") or {}, bot_ok=bool(bot and bot.is_ready()),
                       last=db.get("last_refresh") or {}, lb_import=db.get("letterboxd_import") or {},
                       rss=db.get("letterboxd_rss") or {}, hist=db.get("history_import") or {},
@@ -306,6 +308,36 @@ def create_app(engine: Engine, bot=None) -> Starlette:
             _spawn(engine.refresh(vue_listings=False))
         return _back(form, "Export uploaded. Importing your ratings now.", "/settings")
 
+    async def trips_import(request: Request):
+        """Cinema trips from your Vue tickets: lines of 'date, film'."""
+        from . import trips
+        from .tmdb import TMDB
+        form = await request.form()
+        rows, bad = trips.parse_lines(form.get("trips") or "")
+        if not rows:
+            return _back(form, "No trips found: use one line per ticket, like '2026-10-06, Sense and Sensibility'",
+                         "/settings")
+        tmdb = TMDB(s.tmdb_key, db) if s.tmdb_key else None
+        try:
+            r = await trips.import_trips(db, tmdb, rows, s.vue_cinema_name or s.vue_cinema_slug, s.tickets,
+                                         db.get("installed_month") or datetime.now(s.tz).strftime("%Y-%m"))
+        finally:
+            if tmdb:
+                await tmdb.close()
+        engine.replan()
+        msg = f"{r['added']} cinema trip{'s' if r['added'] != 1 else ''} added"
+        if r["already"]:
+            msg += f", {r['already']} already known"
+        if r["tickets"]:
+            msg += f"; tickets marked used: {', '.join(r['tickets'])}"
+        if r["unmatched"]:
+            msg += f"; couldn't match {', '.join(r['unmatched'])}"
+        if bad:
+            msg += f"; skipped {len(bad)} line{'s' if len(bad) != 1 else ''} without a date"
+        if form.get("format") == "json":
+            return JSONResponse({**r, "skipped": bad, "message": msg})
+        return _back(form, msg, "/settings")
+
     async def match(request: Request):
         form = await request.form()
         raw = (form.get("tmdb") or "").strip().lower()
@@ -361,6 +393,7 @@ def create_app(engine: Engine, bot=None) -> Starlette:
         Route("/history", history_update, methods=["POST"]),
         Route("/upload", upload, methods=["POST"]),
         Route("/match", match, methods=["POST"]),
+        Route("/trips", trips_import, methods=["POST"]),
         Route("/send", send_now, methods=["POST"]),
         Route("/backup", backup),
         Route("/api/plan", api_plan),

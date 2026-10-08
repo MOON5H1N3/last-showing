@@ -73,6 +73,8 @@ On any film: **Used a ticket**, **Want to see** (the star beside a title), **I'm
 
 **Want to see** is how you tell Last Showing which films you're set on. It fits them into your free tickets across this month and the next two, giving tickets first to the films that will leave soonest so as many as possible fit. Any that can't fit before they're likely to leave become **paid trips**, in the month you'd need to go, and the top of the Plan page says how many you'd need. Free tickets left over go to the best recommendations. The same buttons come with the monthly Discord DM, and `/picks`, `/used`, `/undo` and `/refresh` work in your DMs with the bot.
 
+**Cinema trips.** Vue has no export, so under **Settings → Cinema trips** you can paste your tickets from the Vue app's My tickets list, one per line ("Sense and Sensibility, Tue 6 Oct 2026" or "2026-10-06, Sense and Sensibility"). Each film counts once. Trips are marked as seen, count as Monzo tickets for months Last Showing has been running (up to your allowance, never one you gave back), and are kept to check the big-screen score against what you really chose.
+
 ## Settings
 
 Everything except secrets is on the Settings page and takes effect when you save:

@@ -123,3 +123,14 @@ class TestFilmNotices(unittest.TestCase):
                                  "text": "**Extra <Geography>** is no longer listed at Vue Test."}])
         r = c.get("/")
         self.assertIn("<strong>Extra &lt;Geography&gt;</strong> is no longer listed", r.text)
+
+
+class TestTripsPage(unittest.TestCase):
+    def test_add_trips(self):
+        c, s, db = client()
+        s.tmdb_key = ""  # no network: unmatched trips are still kept
+        r = c.post("/trips", data={"trips": "date,film\n2023-07-07,Asteroid City\n", "format": "json"})
+        self.assertEqual(r.json()["added"], 1)
+        page = c.get("/settings").text
+        self.assertIn("Cinema trips", page)
+        self.assertIn("1 film since July 2023", page)

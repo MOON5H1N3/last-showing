@@ -29,7 +29,7 @@ input[type=range]{width:100%;accent-color:var(--marquee)}
 {% block content %}
 <div class="setgrid">
 <nav class="sidenav" aria-label="Settings sections">
-  <a href="#tickets">Tickets</a><a href="#cinema">Cinema</a><a href="#appearance">Appearance</a><a href="#recs">Recommendations</a><a href="#reviews">Early reviews</a><a href="#letterboxd">Letterboxd</a><a href="#discord">Discord</a><a href="#data">Schedule and data</a><a href="#notforme">Not for me</a>
+  <a href="#tickets">Tickets</a><a href="#cinema">Cinema</a><a href="#appearance">Appearance</a><a href="#recs">Recommendations</a><a href="#reviews">Early reviews</a><a href="#letterboxd">Letterboxd</a><a href="#trips">Cinema trips</a><a href="#discord">Discord</a><a href="#data">Schedule and data</a><a href="#notforme">Not for me</a>
 </nav>
 
 <div style="display:flex;flex-direction:column;gap:28px">
@@ -174,6 +174,17 @@ input[type=range]{width:100%;accent-color:var(--marquee)}
   </div>
 </section>
 
+<section id="trips" class="scard">
+  <div><div class="rule"></div><h2>Cinema trips</h2></div>
+  <div class="srow">
+    <div><div class="lab">From your Vue tickets</div><div class="help">The films you actually chose to see on the big screen. Each film counts once. They're marked as seen, count as Monzo tickets for months Last Showing has been running (up to your allowance), and will tune the big-screen score. {% if trips and trips.count %}So far: {{ trips.count }} film{{ 's' if trips.count != 1 }} since {{ trips.first|dt('%B %Y') }}{% if trips.rereleases %}, {{ trips.rereleases }} of them re-releases{% endif %}.{% if trips.unmatched %} Not matched to a film: {{ trips.unmatched|join(', ') }}.{% endif %}{% endif %}</div></div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <textarea name="trips" form="tripsform" class="field" rows="5" placeholder="One per line, as the Vue app shows them:&#10;Sense and Sensibility, Tue 6 Oct 2026&#10;2026-09-24, Heart of the Beast" style="font:13px/18px var(--mono);resize:vertical"></textarea>
+      <button class="btn" form="tripsform" style="justify-self:start;align-self:flex-start">Add trips</button>
+    </div>
+  </div>
+</section>
+
 <section id="discord" class="scard">
   <div><div class="rule"></div><h2>Discord</h2></div>
   <div class="srow">
@@ -244,6 +255,7 @@ input[type=range]{width:100%;accent-color:var(--marquee)}
 </div>
 
 <form id="uploadform" method="post" action="/upload" enctype="multipart/form-data" hidden><input type="hidden" name="next" value="/settings#letterboxd"></form>
+<form id="tripsform" method="post" action="/trips" hidden><input type="hidden" name="next" value="/settings#trips"></form>
 <form id="sendform" method="post" action="/send" hidden><input type="hidden" name="next" value="/settings#discord"></form>
 <form id="refreshform" method="post" action="/refresh" hidden><input type="hidden" name="next" value="/settings#data"></form>
 <form id="historyform" method="post" action="/history" hidden><input type="hidden" name="next" value="/settings#data"></form>
