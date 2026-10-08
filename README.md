@@ -125,6 +125,10 @@ Vue's coming-soon list sometimes includes films your cinema never gets. So:
 
 It stays quiet: nothing about recommendations, nothing repeated, a one-morning blip at Vue sends nothing, and everything from one refresh (including break alerts) comes in a single DM.
 
+## Other apps
+
+`GET /api/seen` lists the films you've used tickets on and how many times you've watched each film in your Letterboxd diary, by TMDB id. It's read-only and asks for `DASHBOARD_PASSWORD` if you've set one. [Worth Keeping](https://github.com/MOON5H1N3/worth-keeping) uses it to rank films worth owning on disc.
+
 ## Troubleshooting
 
 - **"Vue listings" fails in the refresh log.** Vue may have changed its site. The listings are read the same way the website reads them, from `/api/microservice/showings/cinemas/<id>/films`. If the cinema ID lookup fails, set `VUE_CINEMA_ID` (Cribbs Causeway is `10018`).

@@ -335,6 +335,9 @@ def create_app(engine: Engine, bot=None) -> Starlette:
     async def api_plan(request: Request):
         return JSONResponse(plan())
 
+    async def api_seen(request: Request):
+        return JSONResponse(tickets.seen_feed(db))
+
     async def health(request: Request):
         return PlainTextResponse("ok")
 
@@ -361,6 +364,7 @@ def create_app(engine: Engine, bot=None) -> Starlette:
         Route("/send", send_now, methods=["POST"]),
         Route("/backup", backup),
         Route("/api/plan", api_plan),
+        Route("/api/seen", api_seen),
         Route("/health", health),
     ]
     return Starlette(routes=routes, middleware=[Middleware(BasicAuth, password=s.dashboard_password)])
