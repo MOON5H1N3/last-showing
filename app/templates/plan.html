@@ -15,13 +15,14 @@
   <div>
     {% if months|length > 1 %}
     <nav class="pills" aria-label="Months" style="margin-bottom:var(--space-6)">
-      {% for mo in months %}<a class="pill" href="/?m={{ loop.index0 }}" {% if loop.index0 == mi %}aria-current="page"{% endif %}>{{ mo.month_name[:3] }}</a>{% endfor %}
+      {% for mo in months %}<a class="pill" href="/?m={{ loop.index0 }}" {% if loop.index0 == mi %}aria-current="page"{% endif %}>{{ mo.month_name[:3] }}{% if mo.month[:4] != months[0].month[:4] %} &rsquo;{{ mo.month[2:4] }}{% endif %}</a>{% endfor %}
     </nav>
     {% endif %}
     <div class="monthband" aria-hidden="true"></div>
     <h1 class="display" style="margin:0;font-size:clamp(48px,7vw,72px);line-height:.9">{{ name }}{% if months|length > 1 %}<a href="/?m={{ (mi + 1) % (months|length) }}" aria-label="Show {{ months[(mi + 1) % (months|length)].month_name }}" style="color:var(--marquee-text);text-decoration:none;margin-left:12px">›</a>{% endif %}</h1>
     <p class="muted" style="margin:var(--space-3) 0 0;font-size:16px;line-height:24px">
       {% if not n_tickets %}No tickets set up, so this is simply what's worth seeing and what's leaving.
+      {% elif not is_current and mp.get('recommends') == false %}{% set open_t = n_tickets - mp.picks|length %}This far ahead, only your Want to see films are planned, so {% if open_t == n_tickets %}{{ 'your ticket is' if n_tickets == 1 else 'both tickets are' if n_tickets == 2 else 'all ' ~ n_tickets ~ ' tickets are' }}{% else %}{{ open_t }} ticket{{ 's are' if open_t != 1 else ' is' }}{% endif %} still open. Recommendations start three months out.
       {% elif not is_current %}A forecast. Vue lists showtimes about a week ahead, so these picks firm up as {{ name }} gets closer.
       {% elif left == 0 %}All your tickets are used this month. Anything below is worth paying for.
       {% elif left == 1 %}One ticket left, {{ 'which rolls over if unused' if s.ticket_rollover else 'which expires ' ~ (mp.month_end|dt('%a %-d %b')) }}.
@@ -88,7 +89,7 @@
 
 {% if mp.picks %}
 <section class="section">
-  <div class="sechead"><h2 class="sec">{{ 'Your ticket picks' if is_current else 'Likely picks for ' ~ name }}</h2><span class="count">{{ mp.picks|length }} of {{ n_tickets }} ticket{{ 's' if n_tickets != 1 }}</span></div>
+  <div class="sechead"><h2 class="sec">{{ 'Your ticket picks' if is_current else ('Want to see in ' ~ name if mp.get('recommends') == false else 'Likely picks for ' ~ name) }}</h2><span class="count">{{ mp.picks|length }} of {{ n_tickets }} ticket{{ 's' if n_tickets != 1 }}</span></div>
   <p class="lead">{% if is_current %}In the order you need to go.{% else %}A forecast: films picked for an earlier month aren't repeated.{% endif %}</p>
   <div class="grid2">{% for p in mp.picks %}{{ m.pick_card(p, mp.month, is_current, name) }}{% endfor %}</div>
 </section>

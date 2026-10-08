@@ -128,3 +128,17 @@ class TestPinOverAllowance(unittest.TestCase):
         paid = [i for i in m["paid_trips"] if i["film_id"] == "HO11"]
         self.assertTrue(paid and paid[0]["paid_trip"])
         self.assertNotIn("HO11", [i["film_id"] for i in m["everything"] + m["worth_paying"]])
+
+
+class TestFarAhead(unittest.TestCase):
+    def test_plans_as_far_as_vue_lists_with_only_wanted_films_far_out(self):
+        from app.planner import make_plan
+        from tests.test_core import NOW, seeded_db, settings
+        db = seeded_db()
+        db.x("UPDATE vue_films SET release_date='2027-02-12' WHERE film_id='HO8'")  # Clayface moves to February
+        db.x("INSERT INTO wants(film_id,tmdb_id,title,created_at) VALUES('HO8',9008,'Clayface','x')")
+        months = make_plan(db, settings(), NOW)["months"]
+        self.assertEqual([m["month"] for m in months][-1], "2027-02")  # Oct 2026 to Feb 2027
+        self.assertEqual([m["recommends"] for m in months], [True, True, True, False, False])
+        self.assertEqual(months[3]["picks"], [])                        # January: nothing wanted, tickets left open
+        self.assertEqual([p["film_id"] for p in months[4]["picks"]], ["HO8"])

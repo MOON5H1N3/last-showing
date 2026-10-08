@@ -28,8 +28,9 @@ from .taste import VARIANTS, TasteModel, community_value, size_effect, stars
 MAJOR = ("disney", "warner", "universal", "sony", "paramount", "20th century")
 MID = ("studiocanal", "lionsgate", "entertainment film", "altitude", "signature", "sky", "black bear",
        "elevation", "focus", "eone", "vertigo", "searchlight", "a24")
-MONTHS_AHEAD = 3  # this month and the next two
-PLAN_VERSION = 11  # bump when the plan's shape changes, so a saved plan from an older version is rebuilt
+MONTHS_AHEAD = 3   # recommendations fill this month and the next two
+MAX_MONTHS = 12    # beyond those, plan as far as Vue lists films (your Want to see films only), up to a year
+PLAN_VERSION = 12  # bump when the plan's shape changes, so a saved plan from an older version is rebuilt
 CONF_SHRINK = {"high": 1.0, "medium": 0.9, "low": 0.75, "none": 0.5}
 
 
@@ -403,8 +404,11 @@ def make_plan(db: DB, s: Settings, now: datetime | None = None, model: TasteMode
     dismissed = {r["film_id"] for r in db.q("SELECT film_id FROM dismissed")}
     pins = {r["film_id"]: r["month"] for r in db.q("SELECT film_id, month FROM pins")}
     wants = {r["film_id"] for r in db.q("SELECT film_id FROM wants")}
+    # as far as Vue lists: the month of the latest film it says is opening (or showing), at least three months
+    last_listed = max([date.fromisoformat(f["release_date"]) for f in films if f["kind"] == "film" and f["release_date"]]
+                      + [m_start], default=m_start)
     months = [m_start]
-    for _ in range(MONTHS_AHEAD - 1):
+    while len(months) < MAX_MONTHS and (len(months) < MONTHS_AHEAD or month_bounds(months[-1])[2] <= last_listed):
         months.append(month_bounds(months[-1])[2])
     window_end = month_bounds(months[-1])[1]
 
@@ -676,7 +680,10 @@ def make_plan(db: DB, s: Settings, now: datetime | None = None, model: TasteMode
             if c.film_id in order:
                 order[c.film_id].paid_trip = True  # the film page says it's a paid trip
         paid += over
-        picks = [c for c in cands if c not in over][:tickets]
+        # beyond the first three months the slate is too thin to recommend from: only your Want to see films get
+        # tickets there, and the rest stay open
+        recommend = k < MONTHS_AHEAD
+        picks = [c for c in cands if c not in over and (recommend or c.pinned)][:tickets]
         for p in picks + paid:
             end = date.fromisoformat(p.est_end)
             p.watch_by = min(max(end, date.fromisoformat(p.first_date)), me).isoformat()
@@ -712,6 +719,7 @@ def make_plan(db: DB, s: Settings, now: datetime | None = None, model: TasteMode
         month_plans.append({
             "month": key, "month_label": ms.strftime("%B %Y"), "month_name": ms.strftime("%B"),
             "month_start": ms.isoformat(), "month_end": me.isoformat(), "current": current,
+            "recommends": recommend,  # False beyond three months: only Want to see films take tickets
             "tickets_left": tickets if current else max(0, tickets - 0),
             "picks": [asdict(p) for p in picks], "paid_trips": [asdict(p) for p in paid],
             "leaving_soon": [asdict(i) for i in leaving[:6]],
