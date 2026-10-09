@@ -142,3 +142,18 @@ class TestFarAhead(unittest.TestCase):
         self.assertEqual([m["recommends"] for m in months], [True, True, True, False, False])
         self.assertEqual(months[3]["picks"], [])                        # January: nothing wanted, tickets left open
         self.assertEqual([p["film_id"] for p in months[4]["picks"]], ["HO8"])
+
+
+class TestMonthsShown(unittest.TestCase):
+    def test_only_months_worth_planning_and_further_ahead(self):
+        from app.planner import make_plan
+        from tests.test_core import NOW, seeded_db, settings
+        db = seeded_db()
+        db.x("UPDATE vue_films SET release_date='2027-05-14' WHERE film_id='HO8'")  # one film, far off
+        p = make_plan(db, settings(), NOW)
+        self.assertEqual([m["month"] for m in p["months"]], ["2026-10", "2026-11", "2026-12"])
+        self.assertEqual([f["film_id"] for f in p["further_ahead"]], ["HO8"])
+        db.x("INSERT INTO wants(film_id,tmdb_id,title,created_at) VALUES('HO8',9008,'Clayface','x')")
+        p = make_plan(db, settings(), NOW)
+        self.assertEqual(p["months"][-1]["month"], "2027-05")  # wanting it brings its month onto the page
+        self.assertEqual(p["further_ahead"], [])

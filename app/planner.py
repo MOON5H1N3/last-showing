@@ -30,7 +30,9 @@ MID = ("studiocanal", "lionsgate", "entertainment film", "altitude", "signature"
        "elevation", "focus", "eone", "vertigo", "searchlight", "a24")
 MONTHS_AHEAD = 3   # recommendations fill this month and the next two
 MAX_MONTHS = 12    # beyond those, plan as far as Vue lists films (your Want to see films only), up to a year
-PLAN_VERSION = 12  # bump when the plan's shape changes, so a saved plan from an older version is rebuilt
+SHOW_MONTHS = 6    # months on the Plan page: up to the last worth planning (a Want to see film, or BUSY_MONTH openings)
+BUSY_MONTH = 3
+PLAN_VERSION = 13  # bump when the plan's shape changes, so a saved plan from an older version is rebuilt
 CONF_SHRINK = {"high": 1.0, "medium": 0.9, "low": 0.75, "none": 0.5}
 
 
@@ -740,6 +742,21 @@ def make_plan(db: DB, s: Settings, now: datetime | None = None, model: TasteMode
         "free_tickets": remaining + s.tickets * (len(months) - 1),
     }
 
+    # Only months worth planning go on the Plan page: up to the last one with a Want to see film in it, or with at
+    # least BUSY_MONTH films opening (at most SHOW_MONTHS); never fewer than three. Films opening later are listed
+    # once, under "Further ahead", where marking one Want to see brings its month onto the page.
+    n_show = MONTHS_AHEAD
+    for k, mp in enumerate(month_plans):
+        wanted_here = any(i.get("wanted") for sec in ("picks", "paid_trips") for i in mp[sec])
+        if wanted_here or (k < SHOW_MONTHS and len(mp["opening"]) >= BUSY_MONTH):
+            n_show = max(n_show, k + 1)
+    n_show = min(n_show, len(month_plans))
+    shown_end = month_plans[n_show - 1]["month_end"]
+    further = sorted(({"film_id": i.film_id, "title": i.title, "release_date": i.release_date, "poster": i.poster,
+                       "wanted": i.wanted, "predicted": i.predicted, "why": i.why}
+                      for i, _, _ in base if i.kind == "film" and i.release_date and i.release_date > shown_end),
+                     key=lambda f: (f["release_date"], -(f["predicted"] or 0)))
+    month_plans = month_plans[:n_show]
     cur = month_plans[0]
     days_left = (m_end - today).days + 1
     warning = None
@@ -757,6 +774,7 @@ def make_plan(db: DB, s: Settings, now: datetime | None = None, model: TasteMode
         "picks": cur["picks"], "leaving_soon": cur["leaving_soon"], "also_good": cur["also_good"],
         "next_month": month_plans[1]["opening"] if len(month_plans) > 1 else [],
         "months": month_plans,
+        "further_ahead": further,
         "films": {item.film_id: asdict(item) for item, _, _ in base},
         "warning": warning,
         "unscored": unscored,

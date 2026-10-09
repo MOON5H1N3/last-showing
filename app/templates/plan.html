@@ -139,4 +139,12 @@
   </details>
 </section>
 {% endif %}
+{% set further = plan.get('further_ahead') or [] %}
+{% if further and mi == months|length - 1 %}
+<section class="section">
+  <div class="sechead"><h2 class="sec">Further ahead</h2><span class="count">{{ further|length }} film{{ 's' if further|length != 1 }}</span></div>
+  <p class="lead">Films Vue has announced for later, too few to plan month by month yet. Mark one Want to see and its month joins the plan, with a ticket waiting.</p>
+  <div class="list">{% for f in further %}{% set i = plan.films.get(f.film_id, f) %}{{ m.row(i, i.release_date|dt('%-d %b %Y'), i.why or '') }}{% endfor %}</div>
+</section>
+{% endif %}
 {% endblock %}
