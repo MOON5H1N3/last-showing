@@ -186,3 +186,36 @@ class TestPaidTrips(unittest.TestCase):
         c.post("/paid", data={"use_id": use, "next": "/"})
         self.assertNotIn("trips are marked as tickets", c.get("/").text)
         self.assertEqual(db.one("SELECT source FROM cinema_trips WHERE film_id='HO11'")["source"], "paid")
+
+
+class TestContextAndUndo(unittest.TestCase):
+    def test_want_from_a_month_and_undo(self):
+        c, s, db = client()
+        p = c.get("/?m=1").text  # November
+        self.assertIn('/film/HO9?from=2026-11', p)  # film links carry the month
+        self.assertNotIn('class="wantstar', p)       # no stars in the lists any more
+        page = c.get("/film/HO9?from=2026-11").text
+        self.assertIn("Want to see in November", page)
+        self.assertIn("or earliest free ticket", page)
+        self.assertIn("☆ Want to see<", c.get("/film/HO9").text)  # no month: earliest free ticket
+        r = c.post("/pin", data={"film_id": "HO9", "month": "2026-11", "next": "/film/HO9?from=2026-11"},
+                   follow_redirects=False)
+        loc = r.headers["location"]
+        self.assertIn("in+November", loc)
+        tok = loc.split("undo=")[1].split("#")[0]
+        page = c.get(loc).text
+        self.assertIn(">Undo<", page)
+        c.post("/undo-last", data={"token": tok, "next": "/film/HO9"})
+        self.assertIsNone(db.one("SELECT 1 FROM wants WHERE film_id='HO9'"))
+        self.assertIsNone(db.one("SELECT 1 FROM pins WHERE film_id='HO9'"))
+        r = c.post("/undo-last", data={"token": tok, "next": "/"}, follow_redirects=False)
+        self.assertIn("can%27t+be+undone", r.headers["location"])  # only once
+
+    def test_undo_a_ticket(self):
+        c, s, db = client()
+        r = c.post("/use", data={"film_id": "HO1", "next": "/"}, follow_redirects=False)
+        tok = r.headers["location"].split("undo=")[1].split("#")[0]
+        self.assertIsNotNone(db.one("SELECT 1 FROM ticket_uses WHERE film_id='HO1' AND active=1"))
+        c.post("/undo-last", data={"token": tok, "next": "/"})
+        self.assertIsNone(db.one("SELECT 1 FROM ticket_uses WHERE film_id='HO1'"))
+        self.assertIsNone(db.one("SELECT 1 FROM cinema_trips WHERE film_id='HO1'"))

@@ -33,9 +33,10 @@
       <div><div style="font-weight:600">{% if f.your_rating is not none %}You rated it {{ f.your_rating }}★{% else %}Your predicted rating{% endif %}</div>
         <div class="muted small">{{ m.confidence(f.confidence) }}.{% if m.fav(f)|trim %} {{ m.fav(f) }}.{% endif %}</div></div>
     </div>
-    <div style="display:flex;gap:10px;flex-wrap:wrap">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
       {% if plan.tickets_total %}{{ m.booked_btn(f) }}{% endif %}
-      {{ m.want_btn(f) }}
+      {% set fm = (pin_months|selectattr(0, 'equalto', from_month)|first) if from_month else none %}
+      {{ m.want_btn(f, from_month=fm[0] if fm else none, from_name=fm[1] if fm else none) }}
       {{ m.hide_btn(f) }}
     </div>
     {% if f.wanted and pin_months %}

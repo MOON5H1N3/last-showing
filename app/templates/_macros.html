@@ -1,5 +1,8 @@
 {# Shared pieces. Import with: {% import '_macros.html' as m with context %} #}
 
+{# A film's page; from a month's plan it carries that month, so Want to see there means that month #}
+{% macro fhref(fid) %}/film/{{ fid }}{% if film_from %}?from={{ film_from }}{% endif %}{% endmacro %}
+
 {% macro cert(c) %}{% if c %}<span class="cert {{ c|certclass }}" title="Rated {{ c }}">{{ c }}</span>{% endif %}{% endmacro %}
 
 {% macro rating(v, cls='num') %}<span class="{{ cls }}" title="Predicted rating">{{ '%.1f'|format(v or 0) }}<span class="st">★</span></span>{% endmacro %}
@@ -25,12 +28,15 @@
 {% macro want_where(item) %}{% set mo = (item.want_month ~ '-01')|dt('%b') if item.want_month else '' %}{% if item.want_how == 'chosen' %}{{ (item.want_month ~ '-01')|dt('%B') }}{% if item.paid_trip %}, paid trip{% endif %}{% elif item.want_how == 'free' %}next free ticket ({{ mo }}){% elif item.want_how == 'paid' %}paid trip ({{ mo }}){% else %}next free ticket{% endif %}{% endmacro %}
 
 {# The one Want to see button. Not wanted: "☆ Want to see". Wanted: says where it's going, with Remove. #}
-{% macro want_btn(item, small=False) %}
+{% macro want_btn(item, small=False, from_month=None, from_name=None) %}
   {% if item.wanted %}
   <span class="wanted{{ ' small' if small }}"><span class="mono">★</span> Wanted: {{ want_where(item) }}</span>
-  <form class="inline" method="post" action="/unwant"><input type="hidden" name="film_id" value="{{ item.film_id }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn ghost{{ ' small' if small }}" aria-label="Remove {{ item.title }} from Want to see">Remove</button></form>
+  <form class="inline" method="post" action="/unwant"><input type="hidden" name="film_id" value="{{ item.film_id }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn ghost{{ ' small' if small }}" title="Takes it off Want to see, so it no longer holds a ticket">Remove</button></form>
+  {% elif from_month %}
+  <form class="inline" method="post" action="/pin"><input type="hidden" name="film_id" value="{{ item.film_id }}"><input type="hidden" name="month" value="{{ from_month }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn want{{ ' small' if small }}" title="Holds one of {{ from_name }}'s free tickets for it (a paid trip if they're used)">☆ Want to see in {{ from_name }}</button></form>
+  <form class="inline" method="post" action="/want"><input type="hidden" name="film_id" value="{{ item.film_id }}"><input type="hidden" name="next" value="{{ path }}"><button class="linkbtn" style="font-size:13px" title="Gives it the first free ticket before it's likely to leave, whichever month that is">or earliest free ticket</button></form>
   {% else %}
-  <form class="inline" method="post" action="/want"><input type="hidden" name="film_id" value="{{ item.film_id }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn want{{ ' small' if small }}" aria-pressed="false" title="Gets the next free ticket before it's likely to leave">☆ Want to see</button></form>
+  <form class="inline" method="post" action="/want"><input type="hidden" name="film_id" value="{{ item.film_id }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn want{{ ' small' if small }}" title="Gives it the first free ticket before it's likely to leave, whichever month that is">☆ Want to see</button></form>
   {% endif %}
 {% endmacro %}
 
@@ -83,18 +89,16 @@
 
 {% macro pick_card(p, month_key, is_current, month_name, ctx='pick') %}
   <article class="card fcard">
-    <a class="fposter" href="/film/{{ p.film_id }}" {% if p.poster %}style="background-image:url('{{ p.poster }}')"{% endif %} aria-label="{{ p.title }}: film page"></a>
+    <a class="fposter" href="{{ fhref(p.film_id) }}" {% if p.poster %}style="background-image:url('{{ p.poster }}')"{% endif %} aria-label="{{ p.title }}: film page"></a>
     <div class="fbody">
       {{ tags(p, ctx) }}
-      <div class="ftitlerow"><h3 class="ftitle"><a href="/film/{{ p.film_id }}">{{ p.title }}</a></h3></div>
+      <div class="ftitlerow"><h3 class="ftitle"><a href="{{ fhref(p.film_id) }}">{{ p.title }}</a></h3></div>
       <p class="finfo">{{ info(p) }}</p>
       {{ figures(p, is_current, month_name) }}
       {{ showtimes(p, 2) }}
       <div class="actions">
         {% set can_use = is_current and plan.tickets_total %}
         {% if can_use %}{{ booked_btn(p) }}{% endif %}
-        {{ want_btn(p) }}
-        {{ hide_btn(p) }}
       </div>
     </div>
   </article>
@@ -107,7 +111,7 @@
 {% macro buzz_line(i) %}{% set b = i.buzz or {} %}{% set bits = [] %}{% if b.get('tmdb_popularity') %}{% set _ = bits.append('TMDB popularity ' ~ ('%.0f'|format(b.tmdb_popularity))) %}{% endif %}{% if b.get('opening_showings') %}{% set _ = bits.append(b.opening_showings ~ ' showings in its opening week here') %}{% endif %}{% if b.get('early_ratings') %}{% set _ = bits.append('{:,}'.format(b.early_ratings) ~ ' early Letterboxd ratings') %}{% endif %}{{ bits|join(', ') }}{% endmacro %}
 
 {% macro poster(i, note) %}
-  <a class="poster" href="/film/{{ i.film_id }}">
+  <a class="poster" href="{{ fhref(i.film_id) }}">
     <span class="img" {% if i.poster %}style="background-image:url('{{ i.poster }}')"{% endif %}>{{ cert(i.cert) }}</span>
     <span class="t">{{ i.title }}</span>
     <span class="m"><span>{{ note }}</span><b>{{ '%.1f'|format(i.predicted or 0) }}★</b></span>
@@ -119,9 +123,9 @@
 {% macro row(i, when, note, ctx='') %}
   <div class="lrow">
     <span class="when">{{ when }}</span>
-    <a class="thumb" href="/film/{{ i.film_id }}" tabindex="-1" aria-hidden="true" {% if i.poster %}style="background-image:url('{{ i.poster }}')"{% endif %}></a>
-    <div><div class="t"><a href="/film/{{ i.film_id }}">{{ i.title }}</a>{{ tags(i, ctx) }}</div><div class="m">{{ note }}</div></div>
-    <span class="r">{{ want_star(i) }}{{ '%.1f'|format(i.predicted or 0) }}<span class="st">★</span></span>
+    <a class="thumb" href="{{ fhref(i.film_id) }}" tabindex="-1" aria-hidden="true" {% if i.poster %}style="background-image:url('{{ i.poster }}')"{% endif %}></a>
+    <div><div class="t"><a href="{{ fhref(i.film_id) }}">{{ i.title }}</a>{{ tags(i, ctx) }}</div><div class="m">{{ note }}</div></div>
+    <span class="r">{{ '%.1f'|format(i.predicted or 0) }}<span class="st">★</span></span>
   </div>
 {% endmacro %}
 

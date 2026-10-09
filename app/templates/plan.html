@@ -74,7 +74,7 @@
 <div class="wantsum" style="margin-top:var(--space-6)">
   <strong>You want to see {{ w.total }} film{{ 's' if w.total != 1 }}.</strong>
   {% if not w.paid %}Your free tickets cover {{ 'it' if w.total == 1 else 'all of them' }}{% if w.later %}, apart from {{ w.later|join(', ') }}, which isn't showing yet{% endif %}.
-  {% else %}Your {{ w.free_tickets }} free tickets over the next three months cover {{ w.free }}. You'd need {{ w.paid|length }} paid trip{{ 's' if w.paid|length != 1 }}: {% for x in w.paid %}<a href="/film/{{ x.film_id }}">{{ x.title }}</a> in {{ x.month_name }}{{ ', ' if not loop.last else '.' }}{% endfor %}{% if w.later %} {{ w.later|join(', ') }} isn't showing yet.{% endif %}{% endif %}
+  {% else %}Your {{ w.free_tickets }} free tickets over the months planned cover {{ w.free }}. You'd need {{ w.paid|length }} paid trip{{ 's' if w.paid|length != 1 }}: {% for x in w.paid %}<a href="{{ m.fhref(x.film_id) }}">{{ x.title }}</a> in {{ x.month_name }}{{ ', ' if not loop.last else '.' }}{% endfor %}{% if w.later %} {{ w.later|join(', ') }} isn't showing yet.{% endif %}{% endif %}
 </div>
 {% endif %}
 
@@ -111,7 +111,7 @@
 {% if mp.get('worth_paying') %}
 <section class="section">
   <div class="sechead"><h2 class="sec">{% if not n_tickets %}Worth seeing{% else %}Worth paying for{% endif %}</h2><span class="count">{{ mp.worth_paying|length }} film{{ 's' if mp.worth_paying|length != 1 }}</span></div>
-  <p class="lead">{% if not n_tickets %}The films most worth a cinema trip.{% else %}The next best new films, if you fancy paying. Mark one Want to see and it gets a ticket.{% endif %}</p>
+  <p class="lead">{% if not n_tickets %}The films most worth a cinema trip.{% else %}The next best new films, if you fancy paying. Open one and press Want to see to give it one of {{ name }}'s tickets.{% endif %}</p>
   <div class="list">{% for i in mp.worth_paying %}{{ m.row(i, m.when(i, is_current), m.note(i, 'screen')) }}{% endfor %}</div>
 </section>
 {% endif %}
@@ -147,7 +147,7 @@
 {% if further and mi == months|length - 1 %}
 <section class="section">
   <div class="sechead"><h2 class="sec">Further ahead</h2><span class="count">{{ further|length }} film{{ 's' if further|length != 1 }}</span></div>
-  <p class="lead">Films Vue has announced for later, too few to plan month by month yet. Mark one Want to see and its month joins the plan, with a ticket waiting.</p>
+  <p class="lead">Films Vue has announced for later, too few to plan month by month yet. Open one and press Want to see: its month joins the plan, with a ticket waiting.</p>
   <div class="list">{% for f in further %}{% set i = plan.films.get(f.film_id, f) %}{{ m.row(i, i.release_date|dt('%-d %b %Y'), i.why or '') }}{% endfor %}</div>
 </section>
 {% endif %}

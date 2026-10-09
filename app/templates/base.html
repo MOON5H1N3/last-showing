@@ -73,6 +73,8 @@ a{color:var(--marquee-text)}a:hover{color:var(--ink)}
 /* ---------- notices ---------- */
 .notice{margin-top:var(--space-4);padding:var(--space-3) var(--space-4);border:1px solid var(--hairline);border-left:4px solid var(--marquee);border-radius:var(--radius-md);background:var(--surface-raised);color:var(--ink)}
 .notice.bad{border-left-color:var(--leaving)}
+.notice.done{display:flex;align-items:center;justify-content:space-between;gap:var(--space-4);flex-wrap:wrap}
+.doneacts{display:flex;gap:var(--space-2);align-items:center}
 .notice ul{margin:6px 0 0;padding-left:18px}
 .wantsum{padding:var(--space-3) var(--space-4);border:1px solid var(--hairline);border-left:4px solid var(--marquee);border-radius:var(--radius-md);background:var(--surface-raised);color:var(--ink-muted)}
 .wantsum strong{color:var(--ink)}
@@ -243,7 +245,7 @@ footer.foot a{color:inherit}
   </div>
 </header>
 <main class="wrap">
-  {% if msg %}<p class="notice" role="status">{{ msg }}</p>{% endif %}
+  {% if msg %}<div class="notice done" role="status"><span>{{ msg }}</span><span class="doneacts">{% if undo_token %}<form class="inline" method="post" action="/undo-last"><input type="hidden" name="token" value="{{ undo_token }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn small">Undo</button></form>{% endif %}<a class="btn ghost small" href="{{ path }}" aria-label="Dismiss">✕</a></span></div>{% endif %}
   {% if busy %}<p class="notice" role="status">Refreshing{% if step %}: {{ step }}{% endif %}. Reload in a minute to see the result.</p>{% endif %}
   {% if open_alerts %}<div class="notice bad"><strong>Something's not working</strong><ul>{% for name, a in open_alerts.items() %}<li>{{ name }}, since {{ a.since|dt('%a %d %b, %H:%M') }}: {{ a.error }}</li>{% endfor %}</ul></div>{% endif %}
   {% if problems %}<div class="notice bad"><strong>Setup needed</strong><ul>{% for p in problems %}<li>{{ p }}</li>{% endfor %}</ul></div>{% endif %}

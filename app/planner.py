@@ -757,6 +757,7 @@ def make_plan(db: DB, s: Settings, now: datetime | None = None, model: TasteMode
                       for i, _, _ in base if i.kind == "film" and i.release_date and i.release_date > shown_end),
                      key=lambda f: (f["release_date"], -(f["predicted"] or 0)))
     month_plans = month_plans[:n_show]
+    want_summary["free_tickets"] = remaining + s.tickets * (n_show - 1)  # over the months shown
     cur = month_plans[0]
     days_left = (m_end - today).days + 1
     warning = None

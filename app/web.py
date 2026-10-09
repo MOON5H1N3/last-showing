@@ -20,7 +20,7 @@ from starlette.responses import (FileResponse, HTMLResponse, JSONResponse, Plain
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
-from . import settings_store, tickets, trips, watch
+from . import settings_store, tickets, trips, undo, watch
 from .jobs import Engine
 
 log = logging.getLogger(__name__)
@@ -67,14 +67,19 @@ except OSError:
     TEMPLATES.globals["version"] = "dev"
 
 
-def _back(form, msg: str, default: str = "/") -> RedirectResponse:
-    """Back to the page (and month) the person was on."""
+def _back(form, msg: str, default: str = "/", undo: str | None = None) -> RedirectResponse:
+    """Back to the page (and month) the person was on, saying what changed (with an Undo when there's one)."""
+    from urllib.parse import quote_plus
     nxt = form.get("next") or default
     if not nxt.startswith("/") or nxt.startswith("//"):
         nxt = default
     nxt, _, frag = nxt.partition("#")  # the message goes before any #section, so the browser keeps it
+    nxt = re.sub(r"[?&](msg|undo)=[^&]*", "", nxt)
+    if "?" not in nxt and "&" in nxt:
+        nxt = nxt.replace("&", "?", 1)
     sep = "&" if "?" in nxt else "?"
-    return RedirectResponse(f"{nxt}{sep}msg=" + msg.replace(" ", "+") + (f"#{frag}" if frag else ""), 303)
+    tail = f"&undo={undo}" if undo else ""
+    return RedirectResponse(f"{nxt}{sep}msg={quote_plus(msg)}{tail}" + (f"#{frag}" if frag else ""), 303)
 
 
 class BasicAuth(BaseHTTPMiddleware):
@@ -117,6 +122,7 @@ def create_app(engine: Engine, bot=None) -> Starlette:
             plan=p, s=s, today=today, page=page, busy=engine.busy, step=engine.running_step,
             msg=request.query_params.get("msg", ""), problems=s.problems(), open_alerts=db.get("alerts_open") or {},
             need_showing=trips.need_showing(db, today),
+            undo_token=request.query_params.get("undo") if undo.current(db, request.query_params.get("undo")) else None,
             film_notices=[{**n, "html": Markup(re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", str(escape(n["text"]))))}
                           for n in watch.current_notices(db, today)],
             cinema_name=s.vue_cinema_name or s.vue_cinema_slug.replace("-", " ").title(),
@@ -124,7 +130,8 @@ def create_app(engine: Engine, bot=None) -> Starlette:
             days_until=lambda v: (date.fromisoformat(v[:10]) - today).days if v else None,
         )
         ctx.update(extra)
-        ctx["path"] = re.sub(r"[?&]msg=[^&]*", "", ctx["path"])
+        clean = re.sub(r"[?&](msg|undo)=[^&]*", "", ctx["path"])
+        ctx["path"] = clean.replace("&", "?", 1) if "?" not in clean and "&" in clean else clean
         return HTMLResponse(TEMPLATES.get_template(name).render(**ctx), status_code=status)
 
     # ---------------- pages ----------------
@@ -133,6 +140,7 @@ def create_app(engine: Engine, bot=None) -> Starlette:
         months = p.get("months") or []
         mi = min(_int(request.query_params.get("m"), 0), max(0, len(months) - 1))
         return render("plan.html", request, "plan", plan=p, mi=mi, mp=months[mi] if months else p,
+                      film_from=months[mi]["month"] if months else None,
                       month_used=list(p.get("uses", [])))
 
     async def films_page(request: Request):
@@ -163,7 +171,9 @@ def create_app(engine: Engine, bot=None) -> Starlette:
                       if any(x["film_id"] == fid for sec in sections for x in m.get(sec, []))]
         if not pin_months and p.get("month"):
             pin_months = [(p["month"], datetime.now(s.tz).strftime("%B"))]
+        frm = request.query_params.get("from") or ""
         return render("film.html", request, "films", f=film, pinned_month=pinned, pin_months=pin_months,
+                      from_month=frm if re.fullmatch(r"\d{4}-\d{2}", frm) else None,
                       current_month=p.get("month"))
 
     async def taste_page(request: Request):
@@ -213,6 +223,20 @@ def create_app(engine: Engine, bot=None) -> Starlette:
         row = db.one("SELECT title, tmdb_id FROM vue_films WHERE film_id=?", (film_id,))
         return (row["title"], row["tmdb_id"]) if row else (film_id, None)
 
+    def _where(fid: str) -> str:
+        """Where a wanted film is going, in words, from the fresh plan."""
+        f = (plan().get("films") or {}).get(fid) or {}
+        mo = datetime.strptime(f["want_month"], "%Y-%m").strftime("%B") if f.get("want_month") else None
+        how = f.get("want_how")
+        if how == "chosen":
+            return f"in {mo}, as a paid trip ({mo}'s free tickets are used)" if f.get("paid_trip") else \
+                f"in {mo}, on one of {mo}'s free tickets"
+        if how == "free":
+            return f"on the earliest free ticket: {mo}"
+        if how == "paid":
+            return f"as a paid trip in {mo} (no free ticket comes up before it's likely to leave)"
+        return "on the earliest free ticket, once it's showing"
+
     async def use(request: Request):
         form = await request.form()
         film_id = form.get("film_id") or None
@@ -222,56 +246,71 @@ def create_app(engine: Engine, bot=None) -> Starlette:
             title, tmdb_id = _title(film_id)
         if not title:
             return _back(form, "Pick a film first")
+        tok = undo.save(db, film_id)
         used_on = date.fromisoformat(form.get("used_on") or datetime.now(s.tz).date().isoformat())
         # no free tickets left this month (or you said so): it's a paid trip, recorded without using a ticket
         paid = form.get("paid") == "1" or (plan().get("tickets_left", 1) <= 0)
         if paid:
             trips.record(db, film_id, tmdb_id, title, used_on, "paid", s.vue_cinema_name)
-            what = f"Paid trip noted: {title}"
+            what = f"Paid trip noted for {title}; your free tickets are untouched"
         else:
             tickets.add_use(db, film_id, tmdb_id, title, used_on, "dashboard")
-            what = f"Ticket used on {title}"
+            left = max(0, plan().get("tickets_left", 1) - 1)
+            what = f"Ticket used on {title}: {left} left this month"
         p = engine.replan()
         if film_id and trips.showings(db, film_id, datetime.now(s.tz).date()):
             # straight on to "which showing did you book?"
             where = f"/film/{film_id}" if film_id in (p.get("films") or {}) else "/"
-            return _back({"next": where + "#showing"}, f"{what}. Which showing did you book?")
-        return _back(form, f"{what}. Pick the showing once Vue lists it")
+            return _back({"next": where + "#showing"}, f"{what}. Which showing did you book?", undo=tok)
+        return _back(form, f"{what}. Pick the showing once Vue lists it", undo=tok)
 
     async def mark_paid(request: Request):
         form = await request.form()
+        row0 = db.one("SELECT film_id FROM ticket_uses WHERE id=?", (int(form.get("use_id") or 0),))
+        tok = undo.save(db, row0["film_id"] if row0 else None)
         row = tickets.make_paid(db, int(form.get("use_id") or 0))
         engine.replan()
-        return _back(form, f"{row['title']} is now a paid trip, and its ticket is free again" if row else "Couldn't find that ticket")
+        return _back(form, f"{row['title']} is now a paid trip, and its ticket is free again" if row
+                     else "Couldn't find that ticket", undo=tok)
 
     async def showing(request: Request):
         form = await request.form()
+        srow = db.one("SELECT film_id FROM sessions WHERE session_id=?", (form.get("session_id") or "",))
+        tok = undo.save(db, srow["film_id"] if srow else None)
         got = trips.set_showing(db, form.get("session_id") or "")
         if not got:
             return _back(form, "That showing isn't listed any more")
-        return _back(form, f"Noted: {got['title']}, {got['label']}" + (f", {got['screen']}" if got.get("screen") else ""))
+        return _back(form, f"Showing noted for {got['title']}: {got['label']}" +
+                     (f", {got['screen']}" if got.get("screen") else ""), undo=tok)
 
-    async def undo(request: Request):
+    async def undo_ticket(request: Request):
         form = await request.form()
+        row = db.one("SELECT film_id, title FROM ticket_uses WHERE id=?", (int(form["use_id"]),))
+        tok = undo.save(db, row["film_id"] if row else None)
         tickets.undo_use(db, int(form["use_id"]))
         engine.replan()
-        return _back(form, "Ticket given back")
+        return _back(form, f"Ticket given back from {row['title'] if row else 'that film'}: it's free to use again",
+                     undo=tok)
+
+    async def undo_last(request: Request):
+        form = await request.form()
+        fid = undo.restore(db, form.get("token") or "")
+        engine.replan()
+        return _back(form, f"Undone: {_title(fid)[0]} is back as it was" if fid else "That can't be undone any more")
 
     async def pin(request: Request):
         form = await request.form()
         fid, month = form.get("film_id"), form.get("month")
         if not fid or not re.fullmatch(r"\d{4}-\d{2}", month or ""):
-            return _back(form, "Couldn't pin that")
+            return _back(form, "Couldn't do that")
         title, tid = _title(fid)
+        tok = undo.save(db, fid)
         db.x("INSERT OR REPLACE INTO pins(film_id,month,created_at) VALUES(?,?,?)",
              (fid, month, datetime.now().isoformat(timespec="seconds")))
         db.x("INSERT OR IGNORE INTO wants(film_id,tmdb_id,title,created_at) VALUES(?,?,?,?)",  # choosing a month = wanted
              (fid, tid, title, datetime.now().isoformat(timespec="seconds")))
-        p = engine.replan()
-        name = datetime.strptime(month, "%Y-%m").strftime("%B")
-        paid = any(x["film_id"] == fid for m_ in p.get("months", []) if m_["month"] == month for x in m_.get("paid_trips", []))
-        return _back(form, f"{title}: going in {name}" + (f". {name}'s free tickets are used, so it's a paid trip" if paid
-                                                          else ", with one of that month's free tickets"))
+        engine.replan()
+        return _back(form, f"{title} is on Want to see, {_where(fid)}", undo=tok)
 
     async def want(request: Request):
         form = await request.form()
@@ -279,28 +318,35 @@ def create_app(engine: Engine, bot=None) -> Starlette:
         title, tid = _title(fid)
         if not fid:
             return _back(form, "Couldn't add that")
+        tok = undo.save(db, fid)
         db.x("INSERT OR REPLACE INTO wants(film_id,tmdb_id,title,created_at) VALUES(?,?,?,?)",
              (fid, tid, title, datetime.now().isoformat(timespec="seconds")))
+        db.x("DELETE FROM pins WHERE film_id=?", (fid,))  # "earliest free ticket": no fixed month
         engine.replan()
-        return _back(form, f"{title} added to Want to see. It gets the next free ticket before it's likely to leave")
+        return _back(form, f"{title} is on Want to see, {_where(fid)}", undo=tok)
 
     async def unwant(request: Request):
         form = await request.form()
-        db.x("DELETE FROM wants WHERE film_id=?", (form.get("film_id"),))
-        db.x("DELETE FROM pins WHERE film_id=?", (form.get("film_id"),))
+        fid = form.get("film_id")
+        tok = undo.save(db, fid)
+        db.x("DELETE FROM wants WHERE film_id=?", (fid,))
+        db.x("DELETE FROM pins WHERE film_id=?", (fid,))
         engine.replan()
-        return _back(form, f"{_title(form.get('film_id'))[0]} removed from Want to see")
+        return _back(form, f"{_title(fid)[0]} is off Want to see, and no longer holds a ticket", undo=tok)
 
     async def unpin(request: Request):
         form = await request.form()
-        db.x("DELETE FROM pins WHERE film_id=?", (form.get("film_id"),))
+        fid = form.get("film_id")
+        tok = undo.save(db, fid)
+        db.x("DELETE FROM pins WHERE film_id=?", (fid,))
         engine.replan()
-        return _back(form, f"{_title(form.get('film_id'))[0]}: back to the next free ticket")
+        return _back(form, f"{_title(fid)[0]} is on Want to see, {_where(fid)}", undo=tok)
 
     async def dismiss(request: Request):
         form = await request.form()
         fid = form.get("film_id")
         title, tid = _title(fid)
+        tok = undo.save(db, fid)
         db.x("INSERT OR REPLACE INTO dismissed(film_id,tmdb_id,title,created_at) VALUES(?,?,?,?)",
              (fid, tid, title, datetime.now().isoformat(timespec="seconds")))
         db.x("DELETE FROM pins WHERE film_id=?", (fid,))
@@ -308,13 +354,15 @@ def create_app(engine: Engine, bot=None) -> Starlette:
         nxt = form.get("next") or "/"
         if nxt.startswith("/film/"):
             nxt = "/films"
-        return _back({"next": nxt}, f"{title} won't be suggested again. Bring it back under Settings.")
+        return _back({"next": nxt}, f"{title} is hidden and won't be suggested again", undo=tok)
 
     async def undismiss(request: Request):
         form = await request.form()
-        db.x("DELETE FROM dismissed WHERE film_id=?", (form.get("film_id"),))
+        fid = form.get("film_id")
+        tok = undo.save(db, fid)
+        db.x("DELETE FROM dismissed WHERE film_id=?", (fid,))
         engine.replan()
-        return _back(form, f"{_title(form.get('film_id'))[0]} is back in the running", "/settings")
+        return _back(form, f"{_title(fid)[0]} is back in the running", "/settings", undo=tok)
 
     async def refresh(request: Request):
         form = await request.form()
@@ -414,7 +462,8 @@ def create_app(engine: Engine, bot=None) -> Starlette:
         Route("/settings", settings_page),
         Route("/settings", settings_save, methods=["POST"]),
         Route("/use", use, methods=["POST"]),
-        Route("/undo", undo, methods=["POST"]),
+        Route("/undo", undo_ticket, methods=["POST"]),
+        Route("/undo-last", undo_last, methods=["POST"]),
         Route("/showing", showing, methods=["POST"]),
         Route("/paid", mark_paid, methods=["POST"]),
         Route("/pin", pin, methods=["POST"]),
