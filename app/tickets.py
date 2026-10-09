@@ -28,6 +28,22 @@ def undo_use(db: DB, use_id: int) -> None:
         trips.forget_ticket_trip(db, row["film_id"], row["tmdb_id"], row["title"], row["month"])
 
 
+def make_paid(db: DB, use_id: int) -> dict | None:
+    """That trip was paid for, not on a ticket: the ticket goes back, the trip (and its showing) stays, as paid."""
+    from . import trips
+    row = db.one("SELECT * FROM ticket_uses WHERE id=?", (use_id,))
+    if not row:
+        return None
+    db.x("UPDATE ticket_uses SET active=0 WHERE id=?", (use_id,))
+    trips.ensure(db)
+    key = trips._key(row["tmdb_id"], row["title"])
+    if db.one("SELECT 1 FROM cinema_trips WHERE key=?", (key,)):
+        db.x("UPDATE cinema_trips SET source='paid' WHERE key=? AND source='ticket'", (key,))
+    else:
+        trips.record(db, row["film_id"], row["tmdb_id"], row["title"], date.fromisoformat(row["used_on"]), "paid")
+    return dict(row)
+
+
 def undo_latest(db: DB, month: str) -> dict | None:
     row = db.one("SELECT * FROM ticket_uses WHERE month=? AND active=1 ORDER BY id DESC LIMIT 1", (month,))
     if row:

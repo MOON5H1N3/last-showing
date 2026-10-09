@@ -69,7 +69,7 @@ Re-upload an export every few months to pick up old ratings you've changed. New 
 | **Taste** | What it's learned about you, and how accurate it is on films it hadn't seen |
 | **Settings** | Tickets, cinema, recommendation sliders, Letterboxd, Discord, schedule, backups, and films you've ruled out |
 
-On any film: **Booked: use a ticket** (uses one of this month's tickets, then asks which showing you booked), **☆ Want to see** and **Hide this film** (never suggested again; bring it back under Settings → Hidden films).
+On any film: **Booked: use a ticket** (uses one of this month's tickets, then asks which showing you booked; once the month's tickets are used it becomes **Booked (paid)**, which records a paid trip instead), **☆ Want to see** and **Hide this film** (never suggested again; bring it back under Settings → Hidden films).
 
 **Want to see** is how you tell Last Showing which films you're set on. The button then says where each one is going ("★ Wanted: next free ticket (Nov)"). By default it fits them into your free tickets across every month Vue lists films for (up to a year), giving tickets first to the films that will leave soonest so as many as possible fit. Any that can't fit before they're likely to leave become **paid trips**, in the month you'd need to go, and the top of the Plan page says how many you'd need. To fix a film to a month instead, open its page and pick the month under **When**; if that month's free tickets are used, it becomes a paid trip. Free tickets left over go to the best recommendations. The same buttons come with the monthly Discord DM, and `/picks`, `/used`, `/undo` and `/refresh` work in your DMs with the bot.
 

@@ -222,14 +222,27 @@ def create_app(engine: Engine, bot=None) -> Starlette:
             title, tmdb_id = _title(film_id)
         if not title:
             return _back(form, "Pick a film first")
-        used_on = form.get("used_on") or datetime.now(s.tz).date().isoformat()
-        tickets.add_use(db, film_id, tmdb_id, title, date.fromisoformat(used_on), "dashboard")
+        used_on = date.fromisoformat(form.get("used_on") or datetime.now(s.tz).date().isoformat())
+        # no free tickets left this month (or you said so): it's a paid trip, recorded without using a ticket
+        paid = form.get("paid") == "1" or (plan().get("tickets_left", 1) <= 0)
+        if paid:
+            trips.record(db, film_id, tmdb_id, title, used_on, "paid", s.vue_cinema_name)
+            what = f"Paid trip noted: {title}"
+        else:
+            tickets.add_use(db, film_id, tmdb_id, title, used_on, "dashboard")
+            what = f"Ticket used on {title}"
         p = engine.replan()
         if film_id and trips.showings(db, film_id, datetime.now(s.tz).date()):
             # straight on to "which showing did you book?"
             where = f"/film/{film_id}" if film_id in (p.get("films") or {}) else "/"
-            return _back({"next": where + "#showing"}, f"Ticket used on {title}. Which showing did you book?")
-        return _back(form, f"Ticket used on {title}. Pick the showing once Vue lists it")
+            return _back({"next": where + "#showing"}, f"{what}. Which showing did you book?")
+        return _back(form, f"{what}. Pick the showing once Vue lists it")
+
+    async def mark_paid(request: Request):
+        form = await request.form()
+        row = tickets.make_paid(db, int(form.get("use_id") or 0))
+        engine.replan()
+        return _back(form, f"{row['title']} is now a paid trip, and its ticket is free again" if row else "Couldn't find that ticket")
 
     async def showing(request: Request):
         form = await request.form()
@@ -403,6 +416,7 @@ def create_app(engine: Engine, bot=None) -> Starlette:
         Route("/use", use, methods=["POST"]),
         Route("/undo", undo, methods=["POST"]),
         Route("/showing", showing, methods=["POST"]),
+        Route("/paid", mark_paid, methods=["POST"]),
         Route("/pin", pin, methods=["POST"]),
         Route("/unpin", unpin, methods=["POST"]),
         Route("/want", want, methods=["POST"]),

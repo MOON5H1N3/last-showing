@@ -236,7 +236,9 @@ class VueBot(discord.Client):
         if not film_id:
             return None
         db = self.engine.db
-        if not db.one("SELECT 1 FROM ticket_uses WHERE film_id=? AND active=1", (film_id,)):
+        trips.ensure(db)
+        if not (db.one("SELECT 1 FROM ticket_uses WHERE film_id=? AND active=1", (film_id,))
+                or db.one("SELECT 1 FROM cinema_trips WHERE film_id=? AND source='paid'", (film_id,))):
             return None
         opts = trips.showings(db, film_id, datetime.now(self.engine.s.tz).date())
         return ShowingView(opts) if opts else None
@@ -289,6 +291,12 @@ class VueBot(discord.Client):
         month = today.strftime("%Y-%m")
         if film_id and db.one("SELECT 1 FROM ticket_uses WHERE month=? AND film_id=? AND active=1", (month, film_id)):
             return f"You've already used a ticket on **{title}** this month."
+        if (self.engine.plan() or {}).get("tickets_left", 1) <= 0:  # no free tickets left: a paid trip
+            trips.record(db, film_id, tmdb_id, title, today, "paid", s.vue_cinema_name)
+            self.engine.replan()
+            ask = (" Which showing did you book?" if trips.showings(db, film_id, today) else
+                   " I'll ask which showing you booked once Vue lists it.") if film_id else ""
+            return f"Paid trip noted: **{title}** (this month's free tickets are used).{ask}"
         tickets.add_use(db, film_id, tmdb_id, title, today, "discord")
         plan = self.engine.replan()
         left = plan.get("tickets_left", 0)

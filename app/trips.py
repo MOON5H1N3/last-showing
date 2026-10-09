@@ -104,11 +104,18 @@ def set_showing(db: DB, session_id: str) -> dict | None:
 
 
 def need_showing(db: DB, today: date) -> list[dict]:
-    """Tickets used this month on a film whose showing you haven't picked yet, and whose times are now listed."""
+    """Trips this month (on a ticket, or paid) whose showing you haven't picked yet, and whose times are now listed."""
     ensure(db)
-    out = []
-    for u in db.q("SELECT film_id, tmdb_id, title FROM ticket_uses WHERE month=? AND active=1 AND film_id IS NOT NULL",
-                  (today.strftime("%Y-%m"),)):
+    month = today.strftime("%Y-%m")
+    out, seen = [], set()
+    rows = [dict(r) for r in db.q("""SELECT film_id, tmdb_id, title FROM ticket_uses WHERE month=? AND active=1
+                                     AND film_id IS NOT NULL""", (month,))]
+    rows += [dict(r) for r in db.q("""SELECT film_id, tmdb_id, title FROM cinema_trips WHERE source='paid'
+                                      AND substr(visited_on,1,7)=? AND film_id IS NOT NULL""", (month,))]
+    for u in rows:
+        if u["film_id"] in seen:
+            continue
+        seen.add(u["film_id"])
         trip = db.one("SELECT start FROM cinema_trips WHERE key=?", (_key(u["tmdb_id"], u["title"]),))
         if trip and trip["start"]:
             continue

@@ -61,6 +61,10 @@
   {% endif %}
 </section>
 
+{% if is_current and plan.get('tickets_total') and (plan.get('uses') or [])|length > plan.tickets_total %}
+<div class="notice bad"><strong>{{ plan.uses|length }} trips are marked as tickets this month, but you have {{ plan.tickets_total }}.</strong> Which {{ 'one was' if plan.uses|length - plan.tickets_total == 1 else 'ones were' }} paid for?
+  <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px">{% for u in plan.uses %}<form class="inline" method="post" action="/paid"><input type="hidden" name="use_id" value="{{ u.id }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn small">{{ u.title }} was paid</button></form>{% endfor %}</div></div>
+{% endif %}
 {% if is_current %}{% for n in need_showing %}{{ m.showing_picker(n, path) }}{% endfor %}{% endif %}
 {% if is_current and film_notices %}
 {% for n in film_notices %}<div class="notice{{ ' bad' if n.kind == 'gone' }}">{{ n.html }}</div>{% endfor %}

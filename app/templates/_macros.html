@@ -36,7 +36,9 @@
 
 {% macro hide_btn(item, small=False) %}<form class="inline" method="post" action="/dismiss"><input type="hidden" name="film_id" value="{{ item.film_id }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn ghost{{ ' small' if small }}" title="Never suggest it again (undo under Settings)">Hide this film</button></form>{% endmacro %}
 
-{% macro booked_btn(item) %}<form class="inline" method="post" action="/use"><input type="hidden" name="film_id" value="{{ item.film_id }}"><input type="hidden" name="next" value="{{ path }}"><button class="btn main" title="Uses one of this month's tickets, then asks which showing">Booked: use a ticket</button></form>{% endmacro %}
+{# "Booked": uses a ticket while there are any left this month; after that it records a paid trip. Either way it then
+   asks which showing you booked. #}
+{% macro booked_btn(item) %}{% set paid = (plan.get('tickets_left', 0) or 0) <= 0 %}<form class="inline" method="post" action="/use"><input type="hidden" name="film_id" value="{{ item.film_id }}"><input type="hidden" name="next" value="{{ path }}">{% if paid %}<input type="hidden" name="paid" value="1">{% endif %}<button class="btn main" title="{{ 'This month\'s free tickets are used: records a paid trip, then asks which showing' if paid else 'Uses one of this month\'s tickets, then asks which showing' }}">{{ 'Booked (paid)' if paid else 'Booked: use a ticket' }}</button></form>{% endmacro %}
 
 {# kept for older templates #}
 {% macro pin_dismiss(item, month_key, small=False, primary=False) %}{{ want_btn(item, small) }}{{ hide_btn(item, small) }}{% endmacro %}

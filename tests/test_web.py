@@ -162,3 +162,27 @@ class TestPickShowing(unittest.TestCase):
         c.post("/showing", data={"session_id": sid, "next": "/"})
         self.assertNotIn("Which showing did you book", c.get("/").text)
         self.assertIsNotNone(db.one("SELECT start FROM cinema_trips WHERE film_id='HO2' AND start IS NOT NULL"))
+
+
+class TestPaidTrips(unittest.TestCase):
+    def test_booked_when_tickets_are_gone_and_fixing_an_extra_ticket(self):
+        c, s, db = client()
+        month = __import__("datetime").date.today().strftime("%Y-%m")
+        for fid in ("HO1", "HO3"):
+            c.post("/use", data={"film_id": fid, "next": "/"})
+        page = c.get("/film/HO2").text
+        self.assertIn("Booked (paid)", page)  # this month's tickets are used
+        self.assertNotIn("Booked: use a ticket", page)
+        c.post("/use", data={"film_id": "HO2", "paid": "1", "next": "/"})
+        self.assertIsNone(db.one("SELECT 1 FROM ticket_uses WHERE film_id='HO2' AND active=1"))
+        self.assertEqual(db.one("SELECT source FROM cinema_trips WHERE film_id='HO2'")["source"], "paid")
+        # an older mistake: a third trip marked as a ticket
+        db.x("INSERT INTO ticket_uses(month,film_id,tmdb_id,title,used_on,source,active,created_at) "
+             "VALUES(?,'HO11',NULL,'Digger',date('now'),'dashboard',1,'x')", (month,))
+        c.post("/settings", data={})  # any post replans
+        page = c.get("/").text
+        self.assertIn("3 trips are marked as tickets this month", page)
+        use = db.one("SELECT id FROM ticket_uses WHERE film_id='HO11'")["id"]
+        c.post("/paid", data={"use_id": use, "next": "/"})
+        self.assertNotIn("trips are marked as tickets", c.get("/").text)
+        self.assertEqual(db.one("SELECT source FROM cinema_trips WHERE film_id='HO11'")["source"], "paid")
