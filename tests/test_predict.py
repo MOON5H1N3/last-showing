@@ -31,6 +31,26 @@ class TestPredictFeed(unittest.TestCase):
         # remembered for the Letterboxd backfill
         self.assertIn(ids[0], db.get("outside_ids"))
 
+    def test_few_tmdb_votes_count_for_less(self):
+        """A new release's TMDB average from 50 votes moves the prediction less than the same average from 5,000."""
+        import json
+        from app import predict
+        from app.planner import build_model
+        db = seeded_db()
+        model = build_model(db)
+        model.no_comm = None
+        model.w["community"] = 0.7  # a model that does lean on the crowd
+        base = json.loads(db.one("SELECT data FROM movies WHERE tmdb_id=?", (CINEMA_META["HO1"]["id"],))["data"])
+        metas = {tid: {**base, "id": tid, "vote_count": votes, "vote_average": avg, "collection": {"id": 7, "name": "A Series"}}
+                 for tid, votes, avg in ((1, 50, 9.0), (2, 5000, 9.0), (3, 5000, 5.0))}
+        got = {f["tmdb_id"]: f for f in predict.score(db, model, metas, [1, 2, 3])["films"]}
+        few, many, low = got[1]["predicted"], got[2]["predicted"], got[3]["predicted"]
+        self.assertGreater(many, few + 0.3)  # the glowing average counts fully only when it's from many votes
+        self.assertGreater(few, low)
+        self.assertEqual((got[1]["community_source"], got[1]["community_votes"]), ("tmdb", 50))
+        self.assertIn("counts for less", got[1]["reasons"][0])
+        self.assertEqual(got[1]["collection"], {"id": 7, "name": "A Series"})
+
     def test_bad_request(self):
         c, _, _ = client()
         self.assertEqual(c.post("/api/predict", json={}).status_code, 400)

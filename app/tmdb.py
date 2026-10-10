@@ -227,6 +227,9 @@ def slim_movie(d: dict) -> dict:
         "companies": [c["name"] for c in (d.get("production_companies") or [])[:3]],
         "countries": [c["iso_3166_1"] for c in (d.get("production_countries") or [])[:2]],
         "keywords": [k["name"] for k in ((d.get("keywords") or {}).get("keywords") or [])[:25]],
+        # the series it's part of (Home Showing keeps a series in order)
+        "collection": ({"id": d["belongs_to_collection"]["id"], "name": d["belongs_to_collection"].get("name")}
+                       if d.get("belongs_to_collection") else None),
         "vote_average": d.get("vote_average"),
         "vote_count": d.get("vote_count"),
         "popularity": d.get("popularity"),

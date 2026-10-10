@@ -67,7 +67,7 @@ class Settings:
     # Your already-rated films, backfilled a batch per run (each takes ~4s; 150 is ~10 minutes)
     community_backfill: int = field(default_factory=lambda: int(_env("LETTERBOXD_BACKFILL_PER_RUN", "150")))
     # Films other apps ask about (Home Showing's Plex library), backfilled a few per run
-    outside_backfill: int = field(default_factory=lambda: int(_env("LETTERBOXD_OUTSIDE_PER_RUN", "60")))
+    outside_backfill: int = field(default_factory=lambda: int(_env("LETTERBOXD_OUTSIDE_PER_RUN", "120")))
 
     # Past Vue listings (Clusterflick archive, CC BY 4.0) used to learn how long films stay on
     history_enabled: bool = field(default_factory=lambda: _bool("VUE_HISTORY", True))

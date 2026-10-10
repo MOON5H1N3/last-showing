@@ -1,7 +1,12 @@
 """Your predicted rating for any film, for other apps (Home Showing scores your Plex library with it).
 
 POST /api/predict with {"tmdb_ids": [...]} (up to 500 at a time). Read-only: nothing in your plan changes. The ids
-are remembered so the daily refresh slowly backfills their Letterboxd averages, which sharpens later predictions."""
+are remembered so the daily refresh slowly backfills their Letterboxd averages, which sharpens later predictions; the
+most recently asked-about ids are backfilled first, so an app can put its likeliest picks at the front by asking about
+them last.
+
+A TMDB average stands in until the Letterboxd one arrives. It's trusted by how many votes it's from, so a new release's
+handful of glowing votes doesn't count as much as a classic's thousands."""
 from __future__ import annotations
 
 import asyncio
@@ -87,8 +92,9 @@ def score(db: DB, model: TasteModel, metas: dict[int, dict], ids: list[int]) -> 
         crow = comm.get(tid)
         lb = crow["lb_avg"] if crow is not None else None
         value = community_value(lb, meta)
-        pred = model.predict(meta, value, "Letterboxd average" if lb else "TMDB average (on a 5★ scale)",
-                             n=crow["rating_count"] if lb else None)
+        # a TMDB average from a few dozen votes (a new release) counts for less, as a young Letterboxd average does
+        n = crow["rating_count"] if lb else (meta.get("vote_count") if value is not None else None)
+        pred = model.predict(meta, value, "Letterboxd average" if lb else "TMDB average (on a 5★ scale)", n=n)
         s = seen.get(tid)
         films.append({
             "tmdb_id": tid, "title": meta.get("title"), "year": meta.get("year"),
@@ -97,6 +103,8 @@ def score(db: DB, model: TasteModel, metas: dict[int, dict], ids: list[int]) -> 
             "keywords": meta.get("keywords") or [], "directors": meta.get("directors") or [],
             "cast": (meta.get("cast") or [])[:4], "poster": meta.get("poster"), "backdrop": meta.get("backdrop"),
             "overview": meta.get("overview"), "trailer": meta.get("trailer"),
+            "collection": meta.get("collection"), "vote_count": meta.get("vote_count"),
+            "community_votes": n,
             "predicted": pred.rating, "fav_chance": pred.fav_chance, "confidence": pred.confidence,
             "reasons": pred.reasons, "community": value,
             "community_source": "letterboxd" if lb else ("tmdb" if value is not None else None),
@@ -111,6 +119,10 @@ async def predict(db: DB, cache: ModelCache, tmdb, ids: list[int]) -> dict:
     model = await asyncio.to_thread(cache.get, db)
     if tmdb:
         metas = await tmdb.details_many(ids, max_age_days=90)
+        # details saved before the series was kept: fetch those again, once
+        stale = [i for i, m in metas.items() if "collection" not in m]
+        if stale:
+            metas.update(await tmdb.details_many(stale, max_age_days=0))
     else:  # no TMDB key: only films already in the cache can be scored
         marks = ",".join("?" * len(ids)) or "NULL"
         metas = {r["tmdb_id"]: json.loads(r["data"])
