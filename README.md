@@ -137,6 +137,8 @@ It stays quiet: nothing about recommendations, nothing repeated, a one-morning b
 
 `GET /api/seen` lists the films you've used tickets on, every cinema trip from your Vue tickets (`trips`), and how many times you've watched each film in your Letterboxd diary, by TMDB id. It's read-only and asks for `DASHBOARD_PASSWORD` if you've set one. [Worth Keeping](https://github.com/MOON5H1N3/worth-keeping) uses it to rank films worth owning on disc.
 
+`POST /api/predict` with `{"tmdb_ids": [...]}` (up to 500) returns your predicted rating for any films, with their details and whether you've seen them. It's read-only too, and nothing in your plan changes. Films it's asked about get their Letterboxd averages filled in over the following days (60 a day; `LETTERBOXD_OUTSIDE_PER_RUN`), which makes later predictions sharper. Home Showing uses it to plan films from your Plex library.
+
 ## Troubleshooting
 
 - **"Vue listings" fails in the refresh log.** Vue may have changed its site. The listings are read the same way the website reads them, from `/api/microservice/showings/cinemas/<id>/films`. If the cinema ID lookup fails, set `VUE_CINEMA_ID` (Cribbs Causeway is `10018`).

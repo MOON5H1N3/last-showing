@@ -263,9 +263,14 @@ class Engine:
                     rated = [t for t in rated_ids if t not in have] + sorted(
                         (t for t in rated_ids if t in no_counts), key=lambda t: have.get(t, ""))
                     todo = cinema[:s.community_fetch_limit] + rated[:s.community_backfill]
+                    # films other apps asked about (Home Showing's Plex library): a few a day, after your own
+                    outside = [t for t in db.get("outside_ids") or [] if t not in have and t not in set(todo)]
+                    todo += outside[:s.outside_backfill]
                     n = await letterboxd.fetch_community(db, todo, len(todo))
                     left = max(0, len(rated) - s.community_backfill)
                     msg = f"{n} averages fetched"
+                    if outside:
+                        msg += f"; {max(0, len(outside) - s.outside_backfill)} Home Showing films still to backfill"
                     return msg + (f"; {left} of your rated films still to backfill" if left else "")
                 await step("Letterboxd averages", do_comm)
 

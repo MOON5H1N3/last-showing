@@ -20,7 +20,7 @@ from starlette.responses import (FileResponse, HTMLResponse, JSONResponse, Plain
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
-from . import settings_store, tickets, trips, undo, watch
+from . import predict, settings_store, tickets, trips, undo, watch
 from .jobs import Engine
 
 log = logging.getLogger(__name__)
@@ -103,6 +103,7 @@ class BasicAuth(BaseHTTPMiddleware):
 
 def create_app(engine: Engine, bot=None) -> Starlette:
     s, db = engine.s, engine.db
+    model_cache = predict.ModelCache()
 
     def plan() -> dict:
         p = engine.plan()
@@ -450,6 +451,25 @@ def create_app(engine: Engine, bot=None) -> Starlette:
     async def api_seen(request: Request):
         return JSONResponse(tickets.seen_feed(db))
 
+    async def api_predict(request: Request):
+        """Your predicted rating for any films, by TMDB id (read-only; Home Showing uses it for your Plex library)."""
+        from .tmdb import TMDB
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        ids = predict.parse_ids((body or {}).get("tmdb_ids") if isinstance(body, dict) else None)
+        if not ids:
+            return JSONResponse({"error": "send {\"tmdb_ids\": [...]}"}, status_code=400)
+        tmdb = TMDB(s.tmdb_key, db) if s.tmdb_key else None
+        try:
+            return JSONResponse(await predict.predict(db, model_cache, tmdb, ids))
+        except PermissionError as e:
+            return JSONResponse({"error": str(e)}, status_code=502)
+        finally:
+            if tmdb:
+                await tmdb.close()
+
     async def health(request: Request):
         return PlainTextResponse("ok")
 
@@ -481,6 +501,7 @@ def create_app(engine: Engine, bot=None) -> Starlette:
         Route("/backup", backup),
         Route("/api/plan", api_plan),
         Route("/api/seen", api_seen),
+        Route("/api/predict", api_predict, methods=["POST"]),
         Route("/health", health),
     ]
     return Starlette(routes=routes, middleware=[Middleware(BasicAuth, password=s.dashboard_password)])
