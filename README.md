@@ -81,6 +81,10 @@ Buttons live on each film's page (the plan's ticket picks also have **Booked**),
 
 Each film counts once. Trips are marked as seen, count as Monzo tickets for months Last Showing has been running (up to your allowance, never one you gave back), and are kept to check the big-screen score against what you really chose.
 
+## On your phone
+
+Chrome installs the dashboard as an app from a secure (https) address. If you run [Home Showing](https://github.com/MOON5H1N3/home-showing) on the same PC, its `setup-https.bat` gives Last Showing one too (such as `https://cinema.moon5h1n3.dev:8443`), working on your home network only: open it on your phone, then Chrome's menu → **Install app**. Without one, **Add to Home screen** still gives you a shortcut.
+
 ## Settings
 
 Everything except secrets is on the Settings page and takes effect when you save:

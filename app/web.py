@@ -91,7 +91,9 @@ class BasicAuth(BaseHTTPMiddleware):
         self.password = password
 
     async def dispatch(self, request, call_next):
-        if not self.password or request.url.path == "/health":
+        # Chrome fetches the install files without a password
+        if not self.password or request.url.path in ("/health", "/manifest.webmanifest") or \
+                request.url.path.startswith("/static/"):
             return await call_next(request)
         header = request.headers.get("authorization", "")
         if header.startswith("Basic "):
@@ -473,6 +475,18 @@ def create_app(engine: Engine, bot=None) -> Starlette:
             if tmdb:
                 await tmdb.close()
 
+    async def manifest(request: Request):
+        """What Chrome needs to install the dashboard as an app on your phone (from a secure address)."""
+        return JSONResponse({
+            "name": APP_NAME, "short_name": APP_NAME, "id": "/", "start_url": "/", "scope": "/",
+            "display": "standalone", "background_color": "#14110f", "theme_color": "#14110f",
+            "description": "Plans your Vue tickets around your own taste, so you catch the films you'll love.",
+            "icons": [{"src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+                      {"src": "/static/app-icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+                      {"src": "/static/icon-maskable-512.png", "sizes": "512x512", "type": "image/png",
+                       "purpose": "maskable"}],
+        }, media_type="application/manifest+json")
+
     async def health(request: Request):
         return PlainTextResponse("ok")
 
@@ -505,6 +519,7 @@ def create_app(engine: Engine, bot=None) -> Starlette:
         Route("/api/plan", api_plan),
         Route("/api/seen", api_seen),
         Route("/api/predict", api_predict, methods=["POST"]),
+        Route("/manifest.webmanifest", manifest),
         Route("/health", health),
     ]
     return Starlette(routes=routes, middleware=[Middleware(BasicAuth, password=s.dashboard_password)])
