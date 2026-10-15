@@ -5,7 +5,7 @@
 
 {% macro cert(c) %}{% if c %}<span class="cert {{ c|certclass }}" title="Rated {{ c }}">{{ c }}</span>{% endif %}{% endmacro %}
 
-{% macro rating(v, cls='num') %}<span class="{{ cls }}" title="Predicted rating">{{ '%.1f'|format(v or 0) }}<span class="st">★</span></span>{% endmacro %}
+{% macro rating(v, cls='num') %}<span class="{{ cls }}" title="Predicted rating: {{ '%.2f'|format(v or 0) }} on the model's smooth scale">{{ (v or 0)|stars|replace('★', '') }}<span class="st">★</span></span>{% endmacro %}
 
 {% macro showtimes(item, days=3) %}
   {% if item.sessions %}
@@ -79,7 +79,7 @@
 {% macro figures(i, is_current, month_name) %}{% set d = days_until(i.watch_by) %}{% set r = i.reviews or {} %}
   <div class="figs">
     {% if i.your_rating is not none %}<span class="fig"><span class="label">You gave it</span><b>{{ i.your_rating }}★</b></span>
-    {% else %}<span class="fig"><span class="label">For you</span><b title="{{ confidence(i.confidence) }}{% if fav(i)|trim %}; {{ fav(i) }}{% endif %}">{{ '%.1f'|format(i.predicted or 0) }}★</b></span>{% endif %}
+    {% else %}<span class="fig"><span class="label">For you</span><b title="{{ confidence(i.confidence) }}{% if (i.predicted or 0)|stars_alt %}; could be {{ (i.predicted or 0)|stars_alt }}{% endif %}{% if fav(i)|trim %}; {{ fav(i) }}{% endif %}">{{ (i.predicted or 0)|stars }}</b></span>{% endif %}
     {% if is_current %}{% if i.chances and i.chances.get('7') is not none %}<span class="fig"><span class="label">On in a week</span><b>{{ '%.0f'|format(i.chances['7'] * 100) }}%</b></span>{% endif %}
     {% else %}<span class="fig"><span class="label">On in {{ month_name }}</span><b>{{ '%.0f'|format((i.p_available or 0) * 100) }}%</b></span>{% endif %}
     {% if i.watch_by %}<span class="fig"><span class="label">Go by</span><b class="{{ 'urgent' if is_current and d is not none and d <= 7 }}">{{ i.watch_by|dt('%a %-d %b') }}</b></span>{% endif %}
@@ -114,7 +114,7 @@
   <a class="poster" href="{{ fhref(i.film_id) }}">
     <span class="img" {% if i.poster %}style="background-image:url('{{ i.poster }}')"{% endif %}>{{ cert(i.cert) }}</span>
     <span class="t">{{ i.title }}</span>
-    <span class="m"><span>{{ note }}</span><b>{{ '%.1f'|format(i.predicted or 0) }}★</b></span>
+    <span class="m"><span>{{ note }}</span><b>{{ (i.predicted or 0)|stars }}</b></span>
   </a>
 {% endmacro %}
 
@@ -125,7 +125,7 @@
     <span class="when">{{ when }}</span>
     <a class="thumb" href="{{ fhref(i.film_id) }}" tabindex="-1" aria-hidden="true" {% if i.poster %}style="background-image:url('{{ i.poster }}')"{% endif %}></a>
     <div><div class="t"><a href="{{ fhref(i.film_id) }}">{{ i.title }}</a>{{ tags(i, ctx) }}</div><div class="m">{{ note }}</div></div>
-    <span class="r">{{ '%.1f'|format(i.predicted or 0) }}<span class="st">★</span></span>
+    <span class="r" title="{% if (i.predicted or 0)|stars_alt %}Could be {{ (i.predicted or 0)|stars_alt }}{% endif %}">{{ (i.predicted or 0)|stars|replace('★', '') }}<span class="st">★</span></span>
   </div>
 {% endmacro %}
 

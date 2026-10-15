@@ -30,7 +30,8 @@
     {% if f.overview %}<p style="margin:0;color:var(--ink-muted);max-width:68ch">{{ f.overview }}</p>{% endif %}
     <div class="card" style="padding:var(--space-4);display:flex;align-items:center;gap:var(--space-4);max-width:480px">
       {{ m.rating(f.predicted) }}
-      <div><div style="font-weight:600">{% if f.your_rating is not none %}You rated it {{ f.your_rating }}★{% else %}Your predicted rating{% endif %}</div>
+      <div><div style="font-weight:600">{% if f.your_rating is not none %}You rated it {{ f.your_rating|stars }}{% else %}You'd most likely give it {{ f.predicted|stars }}{% endif %}</div>
+        {% if f.your_rating is none and f.predicted|stars_alt %}<div class="small" style="color:var(--marquee-text)">A close call: could be {{ f.predicted|stars_alt }}.</div>{% endif %}
         <div class="muted small">{{ m.confidence(f.confidence) }}.{% if m.fav(f)|trim %} {{ m.fav(f) }}.{% endif %}</div></div>
     </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">

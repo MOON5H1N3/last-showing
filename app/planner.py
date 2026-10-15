@@ -20,6 +20,7 @@ from typing import Callable
 import numpy as np
 from datetime import date, datetime, timedelta
 
+from . import stars as halfstars
 from .config import Settings
 from .db import DB
 from .reviews import verdict as review_verdict
@@ -825,6 +826,7 @@ def accuracy_check(db: DB) -> dict:
                    ORDER BY r.rated_on DESC""")
     films = [{"title": r["title"], "film_id": r["film_id"], "predicted": r["predicted"], "rating": r["rating"],
               "gap": round(r["rating"] - r["predicted"], 2), "community": r["community"], "ticket": bool(r["ticket"]),
+              "half_gap": r["rating"] - halfstars.half(r["predicted"]),  # in half-stars, as you'd see it
               "rated_on": r["rated_on"]} for r in rows]
     out = {"films": films[:20], "count": len(films),
            "tracking": db.one("SELECT COUNT(*) n FROM predictions")["n"],

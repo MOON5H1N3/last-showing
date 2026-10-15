@@ -26,6 +26,9 @@ from .jobs import Engine
 log = logging.getLogger(__name__)
 TEMPLATES = Environment(loader=FileSystemLoader(Path(__file__).parent / "templates"),
                         autoescape=select_autoescape(["html"]))
+from . import stars as _stars  # noqa: E402
+TEMPLATES.filters["stars"] = _stars.label        # 3.9 -> "4★": predictions as the half-star you'd give
+TEMPLATES.filters["stars_alt"] = _stars.other    # the neighbouring half-star when it's a close call
 _bg: set[asyncio.Task] = set()
 APP_NAME = "Last Showing"
 

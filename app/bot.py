@@ -14,7 +14,7 @@ from datetime import date, datetime
 import discord
 from discord import app_commands
 
-from . import tickets, trips
+from . import stars, tickets, trips
 from .jobs import Engine
 
 log = logging.getLogger(__name__)
@@ -39,7 +39,7 @@ def _everywhere(cmd):
 
 
 def _line(i: dict, tail: str) -> str:
-    return f"**{i['title']}** · {i['predicted']:.1f}★ · {tail}"
+    return f"**{i['title']}** · {stars.label(i['predicted'])} · {tail}"
 
 
 def plan_embeds(plan: dict, dashboard_url: str) -> list[discord.Embed]:
