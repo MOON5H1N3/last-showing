@@ -1,7 +1,7 @@
 """Pinned and wanted films that stop (or start) holding a ticket: quiet, once, and undone if the film comes back."""
 import sys
 import unittest
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))

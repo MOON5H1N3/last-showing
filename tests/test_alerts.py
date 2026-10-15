@@ -1,7 +1,6 @@
 """Break alerts: keys alert at once, other steps after two failures in a row, and fixes are reported."""
 import sys
 import unittest
-from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))

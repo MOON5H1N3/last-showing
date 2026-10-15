@@ -2,9 +2,7 @@
 import asyncio
 import csv
 import io
-import json
 import sys
-import tempfile
 import unittest
 import zipfile
 from pathlib import Path

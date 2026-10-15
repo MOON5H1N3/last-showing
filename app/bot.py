@@ -9,7 +9,7 @@ Commands (work in your DM with the bot):
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime
+from datetime import datetime
 
 import discord
 from discord import app_commands

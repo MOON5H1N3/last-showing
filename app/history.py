@@ -16,7 +16,6 @@ import logging
 import math
 import re
 import zlib
-from bisect import bisect_left
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
