@@ -843,6 +843,10 @@ def accuracy_check(db: DB) -> dict:
         if gaps:
             out["spot_on"] = round(sum(1 for g in gaps if g == 0) / len(gaps), 2)
             out["within_half"] = round(sum(1 for g in gaps if abs(g) <= 0.5) / len(gaps), 2)
+        crowd_h = [f["rating"] - halfstars.half(f["community"]) for f in films if f["community"] is not None]
+        if crowd_h:  # the Letterboxd average on its own, rounded the same way
+            out["crowd_spot_on"] = round(sum(1 for g in crowd_h if g == 0) / len(crowd_h), 2)
+            out["crowd_within_half"] = round(sum(1 for g in crowd_h if abs(g) <= 0.5) / len(crowd_h), 2)
     return out
 
 

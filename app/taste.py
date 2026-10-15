@@ -326,8 +326,14 @@ def evaluate(rows: list[tuple], folds: int = 5, seed: int = 7) -> dict:
         results.append({"variant": name, "error": round(mae, 3), "spot_on": round(spot, 3), "within_half": round(within, 3),
                         "top10_favourite_rate": round(top_hit, 3) if top_hit is not None else None})
     base_mae = float(np.mean(np.abs(ys - ys.mean())))
-    best = min(results, key=lambda r: r["error"])
+    best = min(results, key=lambda r: r["error"])  # chosen on the smooth scale, which is what the model learns on
+
+    def as_shown(p):  # the half-star you'd see, and how often it matched what you gave
+        h = np.clip(np.floor(np.asarray(p, dtype=float) * 2 + 0.5) / 2, 0.5, 5.0)
+        return {"spot_on": round(float(np.mean(h == ys)), 3), "within_half": round(float(np.mean(np.abs(h - ys) <= 0.5)), 3)}
     return {"ok": True, "films": len(rows), "folds": folds, "guess_average_error": round(base_mae, 3),
+            "guess_average": as_shown(np.full(len(ys), ys.mean())),
+            "pre_release_shown": {"old": as_shown(pre_old), "new": as_shown(pre_new)},
             "favourite_rate": round(float((ys >= FAV).mean()), 3), "variants": results, "best": best["variant"],
             # films before release: treating the missing average as "average" vs scoring on your taste alone
             "pre_release": {"old": round(float(np.mean(np.abs(pre_old - ys))), 3),
