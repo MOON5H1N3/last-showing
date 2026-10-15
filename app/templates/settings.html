@@ -244,9 +244,9 @@ input[type=range]{width:100%;accent-color:var(--marquee)}
 <section id="notforme" class="scard">
   <div><div class="rule"></div><h2>Hidden films</h2></div>
   {% if plan.get('dismissed') %}
-  <p class="help" style="margin:0">Films you've ruled out. They won't be suggested again.</p>
+  <p class="help" style="margin:0">Films you've ruled out (here, or in Home Showing if you use it). They won't be suggested again.</p>
   <div class="list">{% for d in plan.dismissed %}
-    <div class="lrow" style="grid-template-columns:minmax(0,1fr) auto"><span class="t">{{ d.title }}</span>
+    <div class="lrow" style="grid-template-columns:minmax(0,1fr) auto"><span class="t">{{ d.title }}{% if d.film_id.startswith('tmdb:') %} <span class="help">· ruled out in Home Showing</span>{% endif %}</span>
       <form class="inline" method="post" action="/undismiss"><input type="hidden" name="film_id" value="{{ d.film_id }}"><input type="hidden" name="next" value="/settings#notforme"><button class="btn small">Bring back</button></form></div>
   {% endfor %}</div>
   {% else %}<p class="help" style="margin:0">Nothing hidden. Use "Hide this film" on any film to stop it being suggested.</p>{% endif %}

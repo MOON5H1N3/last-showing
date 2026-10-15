@@ -404,7 +404,9 @@ def make_plan(db: DB, s: Settings, now: datetime | None = None, model: TasteMode
     comm = {t: r["lb_avg"] for t, r in comm_rows.items()}
     review_rows = {r["tmdb_id"]: r for r in db.q("SELECT * FROM reviews")}
 
-    dismissed = {r["film_id"] for r in db.q("SELECT film_id FROM dismissed")}
+    dismissed_rows = db.q("SELECT film_id, tmdb_id FROM dismissed")
+    dismissed = {r["film_id"] for r in dismissed_rows}
+    dismissed_tmdb = {r["tmdb_id"] for r in dismissed_rows if r["tmdb_id"]}  # also hides every listing of that film
     pins = {r["film_id"]: r["month"] for r in db.q("SELECT film_id, month FROM pins")}
     wants = {r["film_id"] for r in db.q("SELECT film_id FROM wants")}
     # as far as Vue lists: the month of the latest film it says is opening (or showing), at least three months
@@ -423,7 +425,7 @@ def make_plan(db: DB, s: Settings, now: datetime | None = None, model: TasteMode
             continue
         if f["kind"] == "rerelease" and not s.include_rereleases:
             continue
-        if f["film_id"] in dismissed:
+        if f["film_id"] in dismissed or (f["tmdb_id"] and f["tmdb_id"] in dismissed_tmdb):
             continue
         release = date.fromisoformat(f["release_date"]) if f["release_date"] else None
         fs = sessions.get(f["film_id"], [])

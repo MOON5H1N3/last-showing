@@ -366,9 +366,10 @@ def create_app(engine: Engine, bot=None) -> Starlette:
         form = await request.form()
         fid = form.get("film_id")
         tok = undo.save(db, fid)
+        row = db.one("SELECT title FROM dismissed WHERE film_id=?", (fid,))
         db.x("DELETE FROM dismissed WHERE film_id=?", (fid,))
         engine.replan()
-        return _back(form, f"{_title(fid)[0]} is back in the running", "/settings", undo=tok)
+        return _back(form, f"{row['title'] if row else _title(fid)[0]} is back in the running", "/settings", undo=tok)
 
     async def refresh(request: Request):
         form = await request.form()
@@ -453,6 +454,31 @@ def create_app(engine: Engine, bot=None) -> Starlette:
     async def api_plan(request: Request):
         return JSONResponse(plan())
 
+    async def api_ruled_out(request: Request):
+        """Home Showing's "Not for me", shared: {"add": [{"tmdb_id", "title"}], "remove": [tmdb ids]}. A film ruled
+        out there is hidden here too (by TMDB id, so it's caught whenever Vue lists it), and bringing one back in
+        either app brings it back in both. Answers with what's hidden now."""
+        try:
+            body = await request.json()
+        except Exception:
+            body = None
+        if not isinstance(body, dict):
+            return JSONResponse({"error": "send {\"add\": [...], \"remove\": [...]}"}, status_code=400)
+        now = datetime.now().isoformat(timespec="seconds")
+        changed = False
+        for d in body.get("add") or []:
+            tid = predict.parse_ids([d.get("tmdb_id")] if isinstance(d, dict) else [])
+            if tid and not db.one("SELECT 1 FROM dismissed WHERE tmdb_id=?", (tid[0],)):
+                db.x("INSERT OR REPLACE INTO dismissed(film_id,tmdb_id,title,created_at) VALUES(?,?,?,?)",
+                     (f"tmdb:{tid[0]}", tid[0], str(d.get("title") or tid[0])[:200], now))
+                changed = True
+        for tid in predict.parse_ids(body.get("remove") or []):
+            changed |= bool(db.one("SELECT 1 FROM dismissed WHERE tmdb_id=?", (tid,)))
+            db.x("DELETE FROM dismissed WHERE tmdb_id=?", (tid,))
+        if changed:
+            engine.replan()
+        return JSONResponse({"dismissed": [dict(r) for r in db.q("SELECT * FROM dismissed ORDER BY created_at DESC")]})
+
     async def api_seen(request: Request):
         return JSONResponse(tickets.seen_feed(db))
 
@@ -519,6 +545,7 @@ def create_app(engine: Engine, bot=None) -> Starlette:
         Route("/api/plan", api_plan),
         Route("/api/seen", api_seen),
         Route("/api/predict", api_predict, methods=["POST"]),
+        Route("/api/ruled-out", api_ruled_out, methods=["POST"]),
         Route("/manifest.webmanifest", manifest),
         Route("/health", health),
     ]

@@ -51,6 +51,23 @@ class TestPredictFeed(unittest.TestCase):
         self.assertIn("counts for less", got[1]["reasons"][0])
         self.assertEqual(got[1]["collection"], {"id": 7, "name": "A Series"})
 
+    def test_ruled_out_shared(self):
+        """Home Showing's Not for me hides the film here too, by TMDB id; removing it brings it back."""
+        c, _, db = client()
+        tid = CINEMA_META["HO1"]["id"]
+        ids = lambda: [f["film_id"] for f in c.get("/api/plan").json()["all_candidates"]]  # noqa: E731
+        self.assertIn("HO1", ids())
+        r = c.post("/api/ruled-out", json={"add": [{"tmdb_id": tid, "title": "Resident Evil"}, {"tmdb_id": "junk"}]})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual([(d["film_id"], d["title"]) for d in r.json()["dismissed"]], [(f"tmdb:{tid}", "Resident Evil")])
+        self.assertNotIn("HO1", ids())  # the Vue listing is caught by its TMDB id
+        self.assertIn("ruled out in Home Showing", c.get("/settings").text)
+        c.post("/api/ruled-out", json={"add": [{"tmdb_id": tid, "title": "Again"}]})  # already hidden: left alone
+        self.assertEqual(db.one("SELECT COUNT(*) n FROM dismissed")["n"], 1)
+        c.post("/api/ruled-out", json={"remove": [tid]})
+        self.assertIn("HO1", ids())
+        self.assertEqual(c.post("/api/ruled-out", content=b"nope").status_code, 400)
+
     def test_bad_request(self):
         c, _, _ = client()
         self.assertEqual(c.post("/api/predict", json={}).status_code, 400)

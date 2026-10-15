@@ -143,6 +143,8 @@ It stays quiet: nothing about recommendations, nothing repeated, a one-morning b
 
 `POST /api/predict` with `{"tmdb_ids": [...]}` (up to 500) returns your predicted rating for any films, with their details and whether you've seen them. It's read-only too, and nothing in your plan changes. Films it's asked about get their Letterboxd averages filled in over the following days (120 a day, the ones asked about most recently first; `LETTERBOXD_OUTSIDE_PER_RUN`), which makes later predictions sharper. Home Showing uses it to plan films from your Plex library.
 
+`POST /api/ruled-out` with `{"add": [{"tmdb_id": ..., "title": ...}], "remove": [tmdb ids]}` shares hidden films with Home Showing: a film you mark Not for me there is hidden here too (matched by TMDB id, so whenever Vue lists it), and bringing it back in either app brings it back in both. It answers with everything hidden. Films from Home Showing are marked as such on the Settings page.
+
 ## Troubleshooting
 
 - **"Vue listings" fails in the refresh log.** Vue may have changed its site. The listings are read the same way the website reads them, from `/api/microservice/showings/cinemas/<id>/films`. If the cinema ID lookup fails, set `VUE_CINEMA_ID` (Cribbs Causeway is `10018`).
