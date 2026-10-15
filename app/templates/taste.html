@@ -49,9 +49,10 @@
     {% if mc and mc.ok %}
     <div class="box"><h3>Rating predictions</h3>
       <p class="muted small" style="margin:0 0 10px">Trained on four-fifths of your {{ mc.films }} ratings and tested on the rest, five times over. Guessing your average every time is off by {{ '%.2f'|format(mc.guess_average_error) }}★.</p>
-      <table class="tablemini"><thead><tr><th>Version</th><th>Off by</th><th>Spots favourites</th></tr></thead><tbody>
-      {% for v in mc.variants %}<tr class="{{ 'win' if v.variant == mc.best }}"><td>{{ v.variant }}{% if v.variant == mc.best %} (in use){% endif %}</td><td>{{ '%.2f'|format(v.error) }}★</td><td>{% if v.top10_favourite_rate is not none %}{{ '%.0f'|format(v.top10_favourite_rate * 100) }}%{% endif %}</td></tr>{% endfor %}
+      <table class="tablemini"><thead><tr><th>Version</th><th>Spot on</th><th>Within ½★</th><th>Off by</th><th>Spots favourites</th></tr></thead><tbody>
+      {% for v in mc.variants %}<tr class="{{ 'win' if v.variant == mc.best }}"><td>{{ v.variant }}{% if v.variant == mc.best %} (in use){% endif %}</td><td>{% if v.spot_on is defined %}{{ '%.0f'|format(v.spot_on * 100) }}%{% endif %}</td><td>{% if v.within_half is defined %}{{ '%.0f'|format(v.within_half * 100) }}%{% endif %}</td><td>{{ '%.2f'|format(v.error) }}★</td><td>{% if v.top10_favourite_rate is not none %}{{ '%.0f'|format(v.top10_favourite_rate * 100) }}%{% endif %}</td></tr>{% endfor %}
       </tbody></table>
+      <p class="muted small" style="margin:10px 0 0">"Spot on": the half-star it would have shown is exactly what you gave. "Within ½★": that, or one half-star either side. "Off by" is the smooth estimate's average distance from your rating.</p>
       <p class="muted small" style="margin:10px 0 0">"Spots favourites": of the films it thought most likely to be 4.5★+ (its top 10%), how many were. By chance: {{ '%.0f'|format(mc.favourite_rate * 100) }}%.</p>
       {% if mc.pre_release %}<p class="muted small" style="margin:10px 0 0">Before a film has a Letterboxd average, it's scored on your taste alone: off by {{ '%.2f'|format(mc.pre_release.new) }}★, against {{ '%.2f'|format(mc.pre_release.old) }}★ when a missing average was treated as an average film.</p>{% endif %}
     </div>
@@ -73,7 +74,7 @@
   <div class="rule"></div>
   <h2 class="sec">How close were the guesses?</h2>
   {% if acc.count %}
-  <p class="lead">On the {{ acc.count }} film{{ 's' if acc.count != 1 }} you've rated since Last Showing predicted {{ 'it' if acc.count == 1 else 'them' }}, it was off by {{ '%.2f'|format(acc.error) }}★ on average{% if acc.crowd_error is defined %}; the Letterboxd average alone was off by {{ '%.2f'|format(acc.crowd_error) }}★{% endif %}. {% if acc.bias > 0.15 %}You've liked them more than predicted.{% elif acc.bias < -0.15 %}You've liked them less than predicted.{% endif %}</p>
+  <p class="lead">On the {{ acc.count }} film{{ 's' if acc.count != 1 }} you've rated since Last Showing predicted {{ 'it' if acc.count == 1 else 'them' }}{% if acc.spot_on is defined %}, the half-star it showed was spot on for {{ '%.0f'|format(acc.spot_on * 100) }}% and within ½★ for {{ '%.0f'|format(acc.within_half * 100) }}%. On the smooth scale{% endif %}, it was off by {{ '%.2f'|format(acc.error) }}★ on average{% if acc.crowd_error is defined %}; the Letterboxd average alone was off by {{ '%.2f'|format(acc.crowd_error) }}★{% endif %}. {% if acc.bias > 0.15 %}You've liked them more than predicted.{% elif acc.bias < -0.15 %}You've liked them less than predicted.{% endif %}</p>
   <table class="tablemini" style="max-width:720px"><thead><tr><th>Film</th><th>Predicted</th><th>You gave it</th><th>Gap</th><th></th></tr></thead><tbody>
     {% for f in acc.films %}<tr><td>{% if f.film_id %}<a href="/film/{{ f.film_id }}" style="color:inherit">{{ f.title }}</a>{% else %}{{ f.title }}{% endif %}</td><td>{{ f.predicted|stars }}</td><td>{{ f.rating|stars }}</td><td>{% if f.half_gap == 0 %}Spot on{% else %}{{ '%+g'|format(f.half_gap) }}★{% endif %}</td><td class="faint">{{ 'Ticket' if f.ticket }}</td></tr>{% endfor %}
   </tbody></table>

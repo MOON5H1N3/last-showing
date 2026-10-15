@@ -838,6 +838,11 @@ def accuracy_check(db: DB) -> dict:
         if crowd:
             out["crowd_error"] = round(sum(abs(f["rating"] - f["community"]) for f in crowd) / len(crowd), 2)
             out["crowd_films"] = len(crowd)
+    if out.get("count"):
+        gaps = [f["half_gap"] for f in films]  # all of them, not just the 20 shown
+        if gaps:
+            out["spot_on"] = round(sum(1 for g in gaps if g == 0) / len(gaps), 2)
+            out["within_half"] = round(sum(1 for g in gaps if abs(g) <= 0.5) / len(gaps), 2)
     return out
 
 

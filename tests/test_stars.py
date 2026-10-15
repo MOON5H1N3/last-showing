@@ -19,3 +19,18 @@ class TestHalfStars(unittest.TestCase):
         self.assertEqual(other(3.76), "3½★")
         self.assertEqual(other(3.6), "")   # comfortably 3½★
         self.assertEqual(other(None), "")
+
+
+class TestScoreInHalfStars(unittest.TestCase):
+    def test_accuracy_counts_spot_on_and_within_half(self):
+        from app.db import DB
+        from app.planner import accuracy_check
+        db = DB(":memory:")
+        for tid, pred, rating in ((1, 3.8, 4.0), (2, 3.3, 3.5), (3, 4.1, 3.5), (4, 2.2, 4.0)):
+            db.x("INSERT INTO predictions(tmdb_id,film_id,title,predicted,recorded_on) VALUES(?,?,?,?,'2026-10-01')",
+                 (tid, f"F{tid}", f"Film {tid}", pred))
+            db.x("INSERT INTO ratings(tmdb_id,rating) VALUES(?,?)", (tid, rating))
+        acc = accuracy_check(db)
+        self.assertEqual(acc["count"], 4)
+        self.assertEqual(acc["spot_on"], 0.5)       # 3.8 -> 4★ and 3.3 -> 3½★ exact
+        self.assertEqual(acc["within_half"], 0.75)  # 4.1 -> 4★ vs 3½★ is one step; 2.2 -> 2★ vs 4★ isn't

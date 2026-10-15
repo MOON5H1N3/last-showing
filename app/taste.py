@@ -315,12 +315,15 @@ def evaluate(rows: list[tuple], folds: int = 5, seed: int = 7) -> dict:
                 if f is not None:
                     favs[i] = f
         mae = float(np.mean(np.abs(preds - ys)))
+        shown = np.clip(np.floor(preds * 2 + 0.5) / 2, 0.5, 5.0)  # the half-star you'd see
+        spot = float(np.mean(shown == ys))
+        within = float(np.mean(np.abs(shown - ys) <= 0.5))
         top_hit = None
         if not np.isnan(favs).all():
             cut = np.nanquantile(favs, 0.9)
             chosen = favs >= cut
             top_hit = float((ys[chosen] >= FAV).mean())
-        results.append({"variant": name, "error": round(mae, 3),
+        results.append({"variant": name, "error": round(mae, 3), "spot_on": round(spot, 3), "within_half": round(within, 3),
                         "top10_favourite_rate": round(top_hit, 3) if top_hit is not None else None})
     base_mae = float(np.mean(np.abs(ys - ys.mean())))
     best = min(results, key=lambda r: r["error"])
