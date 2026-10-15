@@ -29,6 +29,7 @@
       {% else %}{{ left }} tickets to use by {{ mp.month_end|dt('%A %d %B') }}.{% endif %}
       {% if is_current and plan.get('tickets_carried') %}Includes {{ plan.tickets_carried }} rolled over from last month.{% endif %}
     </p>
+    {% if profiles|length > 1 %}<p style="margin:var(--space-3) 0 0;font-size:14px">{% if not is_main %}{{ profile_name }}'s plan. {% endif %}{% for p in profiles if p.id != profile_id %}<a href="/together?with={{ p.id }}">Films you'd both enjoy with {{ p.name }} →</a>{% if not loop.last %} · {% endif %}{% endfor %}</p>{% endif %}
   </div>
   {% if n_tickets %}
   <div class="stubs" aria-label="{{ name }}'s tickets">

@@ -33,7 +33,8 @@ class ModelCache:
         from .planner import build_model
         r = db.one("SELECT COUNT(*) AS n, MAX(rated_on) AS last FROM ratings")
         c = db.one("SELECT COUNT(*) AS n FROM community WHERE lb_avg IS NOT NULL")
-        key = (r["n"], r["last"], c["n"], (db.get("model_check") or {}).get("checked_at"),
+        key = (getattr(db, "path", None), str(db.get("quiz")), r["n"], r["last"], c["n"],
+               (db.get("model_check") or {}).get("checked_at"),
                datetime.now().date().isoformat())
         if self.model is None or key != self.key:
             self.model, self.key = build_model(db), key

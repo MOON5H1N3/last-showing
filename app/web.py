@@ -85,6 +85,14 @@ def _back(form, msg: str, default: str = "/", undo: str | None = None) -> Redire
     return RedirectResponse(f"{nxt}{sep}msg={quote_plus(msg)}{tail}" + (f"#{frag}" if frag else ""), 303)
 
 
+class ProfileCookie(BaseHTTPMiddleware):
+    """Which profile is looking: the ls_profile cookie (the main profile when there's none)."""
+    async def dispatch(self, request, call_next):
+        from .profiles import MAIN, current
+        current.set(request.cookies.get("ls_profile") or MAIN)
+        return await call_next(request)
+
+
 class BasicAuth(BaseHTTPMiddleware):
     def __init__(self, app, password: str):
         super().__init__(app)
@@ -107,7 +115,12 @@ class BasicAuth(BaseHTTPMiddleware):
 
 
 def create_app(engine: Engine, bot=None) -> Starlette:
-    s, db = engine.s, engine.db
+    from .profiles import MAIN, DBProxy, EngineProxy, Profiles, SettingsProxy, current
+    profiles = getattr(engine, "profiles", None) or Profiles(engine)
+    engine.profiles = profiles
+    main_engine = engine
+    # every page works as whoever is looking: their database, their settings, their plan
+    s, db, engine = SettingsProxy(profiles), DBProxy(profiles), EngineProxy(profiles)
     model_cache = predict.ModelCache()
 
     def plan() -> dict:
@@ -126,7 +139,9 @@ def create_app(engine: Engine, bot=None) -> Starlette:
         today = datetime.now(s.tz).date()
         ctx = dict(
             plan=p, s=s, today=today, page=page, busy=engine.busy, step=engine.running_step,
-            msg=request.query_params.get("msg", ""), problems=s.problems(), open_alerts=db.get("alerts_open") or {},
+            profiles=profiles.all(), profile_id=current.get() if profiles.exists(current.get()) else MAIN,
+            profile_name=profiles.name(current.get()), is_main=current.get() == MAIN or not profiles.exists(current.get()),
+            msg=request.query_params.get("msg", ""), problems=s.problems() if current.get() == MAIN else [], open_alerts=db.get("alerts_open") or {},
             need_showing=trips.need_showing(db, today),
             undo_token=request.query_params.get("undo") if undo.current(db, request.query_params.get("undo")) else None,
             film_notices=[{**n, "html": Markup(re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", str(escape(n["text"]))))}
@@ -191,6 +206,10 @@ def create_app(engine: Engine, bot=None) -> Starlette:
                       run_sources=source_summary(db))
 
     async def settings_page(request: Request):
+        if current.get() != MAIN and profiles.exists(current.get()):
+            from . import quiz
+            return render("profile_settings.html", request, "settings", progress=quiz.progress(db),
+                          quiz_state=quiz.get(db))
         cinemas = db.get("vue_cinemas") or []
         if not any(c["slug"] == s.vue_cinema_slug for c in cinemas):
             cinemas = [{"id": s.vue_cinema_id, "name": s.vue_cinema_name or s.vue_cinema_slug, "slug": s.vue_cinema_slug}] + cinemas
@@ -207,6 +226,18 @@ def create_app(engine: Engine, bot=None) -> Starlette:
     # ---------------- settings ----------------
     async def settings_save(request: Request):
         form = await request.form()
+        if current.get() != MAIN and profiles.exists(current.get()):
+            mine = dict(db.get("profile_settings") or {})
+            if form.get("ticket_source") in ("monzo", "custom", "none"):
+                mine["ticket_source"] = form["ticket_source"]
+            if (form.get("tickets_per_month") or "").isdigit():
+                mine["tickets_per_month"] = max(0, min(10, int(form["tickets_per_month"])))
+            if form.get("theme") in ("system", "dark", "light"):
+                mine["theme"] = form["theme"]
+            db.set("profile_settings", mine)
+            profiles.rename(current.get(), form.get("profile_name") or "")
+            engine.replan()
+            return _back(form, "Saved", "/settings")
         cinemas = db.get("vue_cinemas") or []
         old_slug = s.vue_cinema_slug
         changed = settings_store.save(db, s, settings_store.from_form(form, cinemas))
@@ -223,6 +254,117 @@ def create_app(engine: Engine, bot=None) -> Starlette:
                          "/settings")
         engine.replan()
         return _back(form, "Settings saved" if changed else "Nothing changed", "/settings")
+
+    # ---------------- profiles ----------------
+    def _as(pid: str, resp):
+        resp.set_cookie("ls_profile", pid, max_age=60 * 60 * 24 * 400, httponly=True, samesite="lax")
+        return resp
+
+    async def profile_switch(request: Request):
+        form = await request.form()
+        pid = form.get("profile") or MAIN
+        pid = pid if profiles.exists(pid) else MAIN
+        nxt = form.get("next") or "/"
+        nxt = nxt if nxt.startswith("/") and not nxt.startswith("//") else "/"
+        if nxt.startswith("/quiz") and pid == MAIN:
+            nxt = "/"
+        return _as(pid, RedirectResponse(nxt, status_code=303))
+
+    async def profile_add(request: Request):
+        form = await request.form()
+        if current.get() != MAIN:
+            return _back(form, "Switch to the main profile to add someone", "/settings")
+        pid = profiles.add(form.get("name") or "", _int(form.get("tickets"), 2))
+        token = current.set(pid)
+        try:
+            engine.replan()
+        finally:
+            current.reset(token)
+        return _as(pid, _back({}, f"Added {profiles.name(pid)}. A minute on this quiz helps a lot.", "/quiz"))
+
+    async def profile_rename(request: Request):
+        form = await request.form()
+        profiles.rename(current.get() if profiles.exists(current.get()) else MAIN, form.get("name") or "")
+        return _back(form, "Renamed", "/settings#profiles")
+
+    async def profile_remove(request: Request):
+        form = await request.form()
+        pid = form.get("profile") or ""
+        if current.get() != MAIN and pid == current.get():
+            name = profiles.name(pid)
+            profiles.remove(pid)
+            return _as(MAIN, _back({}, f"Removed {name}'s profile", "/settings"))
+        return _back(form, "Nothing removed", "/settings")
+
+    async def quiz_page(request: Request):
+        from . import quiz
+        return render("quiz.html", request, "settings", genres=quiz.GENRES, q=quiz.get(db), films=quiz.films(db),
+                      labels=quiz.LABELS, progress=quiz.progress(db))
+
+    async def quiz_genres(request: Request):
+        from . import quiz
+        form = await request.form()
+        likes, avoids = quiz.save_genres(db, form)
+        engine.replan()
+        return _back(form, f"Saved: {len(likes)} liked, {len(avoids)} to skip", "/quiz#films")
+
+    async def quiz_film(request: Request):
+        from . import quiz
+        form = await request.form()
+        tid = _int(form.get("tmdb_id"), 0)
+        if tid:
+            quiz.answer(db, tid, form.get("answer") or "")
+        engine.replan()  # quick (well under a second), so the plan always reflects the answers so far
+        return RedirectResponse((form.get("next") or "/quiz") + "#films", status_code=303)
+
+    async def rate(request: Request):
+        """For a profile without Letterboxd: how was it? Ratings here teach the model like Letterboxd ones."""
+        form = await request.form()
+        fid = form.get("film_id") or ""
+        title, tid = _title(fid)
+        if not tid:
+            return _back(form, "Can't rate that one: it isn't matched to a film", f"/film/{fid}")
+        try:
+            v = float(form.get("rating") or 0)
+        except ValueError:
+            v = 0
+        if v <= 0:
+            db.x("DELETE FROM ratings WHERE tmdb_id=?", (tid,))
+            msg = f"Cleared your rating for {title}"
+        else:
+            v = min(5.0, max(0.5, round(v * 2) / 2))
+            db.x("INSERT OR REPLACE INTO ratings(tmdb_id, rating, rated_on, source) VALUES(?,?,?,'app')",
+                 (tid, v, datetime.now(s.tz).date().isoformat()))
+            msg = f"Rated {title} {_stars.label(v)}"
+        engine.replan()
+        return _back(form, msg, f"/film/{fid}")
+
+    async def together_page(request: Request):
+        others = [p for p in profiles.all() if p["id"] != current.get()]
+        if not others:
+            return RedirectResponse("/settings#profiles", status_code=303)
+        other = request.query_params.get("with")
+        other = other if any(p["id"] == other for p in others) else others[0]["id"]
+        mine = plan()
+        token = current.set(other)
+        try:
+            theirs = plan()
+        finally:
+            current.reset(token)
+        a, b = mine.get("films") or {}, theirs.get("films") or {}
+        mu_a = (mine.get("model") or {}).get("average") or 3.3
+        mu_b = (theirs.get("model") or {}).get("average") or 3.3
+        both = []
+        for fid, f in a.items():
+            g = b.get(fid)
+            if not g or f.get("kind") != "film" or f.get("your_rating") is not None or g.get("your_rating") is not None:
+                continue
+            gap = min((f.get("predicted") or 0) - mu_a, (g.get("predicted") or 0) - mu_b)
+            if gap >= 0:
+                both.append({**f, "theirs": g.get("predicted"), "gap": gap})
+        both.sort(key=lambda f: -f["gap"])
+        return render("together.html", request, "plan", both=both[:20], others=others, other=other,
+                      other_name=profiles.name(other), my_name=profiles.name(current.get()))
 
     # ---------------- actions ----------------
     def _title(film_id: str) -> tuple[str, int | None]:
@@ -524,6 +666,15 @@ def create_app(engine: Engine, bot=None) -> Starlette:
         Route("/taste", taste_page),
         Route("/settings", settings_page),
         Route("/settings", settings_save, methods=["POST"]),
+        Route("/profile", profile_switch, methods=["POST"]),
+        Route("/profile/add", profile_add, methods=["POST"]),
+        Route("/profile/remove", profile_remove, methods=["POST"]),
+        Route("/profile/rename", profile_rename, methods=["POST"]),
+        Route("/quiz", quiz_page),
+        Route("/quiz/genres", quiz_genres, methods=["POST"]),
+        Route("/quiz/film", quiz_film, methods=["POST"]),
+        Route("/rate", rate, methods=["POST"]),
+        Route("/together", together_page),
         Route("/use", use, methods=["POST"]),
         Route("/undo", undo_ticket, methods=["POST"]),
         Route("/undo-last", undo_last, methods=["POST"]),
@@ -549,4 +700,5 @@ def create_app(engine: Engine, bot=None) -> Starlette:
         Route("/manifest.webmanifest", manifest),
         Route("/health", health),
     ]
-    return Starlette(routes=routes, middleware=[Middleware(BasicAuth, password=s.dashboard_password)])
+    return Starlette(routes=routes, middleware=[Middleware(BasicAuth, password=main_engine.s.dashboard_password),
+                                                Middleware(ProfileCookie)])

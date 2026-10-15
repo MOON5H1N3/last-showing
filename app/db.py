@@ -150,3 +150,66 @@ class DB:
     def set(self, key: str, value: Any) -> None:
         self.x("INSERT INTO kv(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                (key, json.dumps(value, default=str)))
+
+
+# ---------------------------------------------------------------- profiles
+# A second person's profile keeps only their own things in their own file. Everything about the cinema and the
+# films (listings, showings, film details, Letterboxd averages, reviews, run-length history) is read from the
+# main database, attached alongside. SQLite looks a name up in the profile file first, then the shared one, so the
+# same queries work for every profile.
+PERSONAL_KEYS = {"plan", "undo", "quiz", "profile_settings", "film_notices", "watch_misses", "watch_lost",
+                 "model_check", "letterboxd_import", "letterboxd_rss", "profile_name", "profiles"}
+PERSONAL_TABLES = {"kv", "predictions", "ratings", "diary", "watchlist", "watched", "pins", "wants", "dismissed",
+                   "ticket_uses", "cinema_trips"}
+
+
+def _personal_schema() -> str:
+    import re
+    out = []
+    plain = "\n".join(line for line in SCHEMA.splitlines() if not line.strip().startswith("--"))
+    for stmt in plain.split(";"):
+        m = re.search(r"CREATE TABLE IF NOT EXISTS (\w+)", stmt)
+        if m and m.group(1) in PERSONAL_TABLES:
+            out.append(stmt.strip())
+    return ";\n".join(out) + ";"
+
+
+class ProfileDB(DB):
+    def __init__(self, path: Path | str, shared_path: Path | str):
+        self.path = str(path)
+        self.shared_path = str(shared_path)
+        Path(self.path).parent.mkdir(parents=True, exist_ok=True)
+        self._conn = sqlite3.connect(self.path, check_same_thread=False, isolation_level=None)
+        self._conn.row_factory = sqlite3.Row
+        self._conn.execute("PRAGMA journal_mode=WAL")
+        self._lock = threading.RLock()
+        self._conn.executescript(_personal_schema())
+        self._conn.execute("ATTACH DATABASE ? AS shared", (self.shared_path,))
+
+    def x(self, sql: str, params: tuple | dict = ()) -> int:
+        import re
+        # never create a shared table (or its index) inside the profile file: an empty copy would hide the real one
+        m = re.match(r"\s*CREATE\s+(?:TABLE|INDEX)\s+IF\s+NOT\s+EXISTS\s+(\w+)(?:\s+ON\s+(\w+))?", sql, re.I)
+        if m and (m.group(2) or m.group(1)) not in PERSONAL_TABLES:
+            return 0
+        return super().x(sql, params)
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """Your own setting if this profile has one, else the shared one (e.g. when the listings were last read).
+        Things that belong to one person (their plan, quiz, Undo, notices) never come from the main profile."""
+        row = self.one("SELECT value FROM main.kv WHERE key=?", (key,))
+        if row is None and key not in PERSONAL_KEYS:
+            row = self.one("SELECT value FROM shared.kv WHERE key=?", (key,))
+        return json.loads(row["value"]) if row else default
+
+    def set(self, key: str, value: Any) -> None:
+        self.x("INSERT INTO main.kv(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+               (key, json.dumps(value, default=str)))
+
+    def backup_to(self, dest) -> None:
+        target = sqlite3.connect(str(dest))
+        try:
+            with self._lock:
+                self._conn.backup(target, name="main")
+        finally:
+            target.close()

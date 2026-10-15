@@ -455,3 +455,79 @@ def size_effect(rows: list[tuple[float, float, int]], min_films: int = 60) -> di
     return {"ok": True, "films": len(rows), "overall_gap": round(float(gap.mean()), 2), "bands": bands,
             "slope_per_10x": round(slope, 2), "slope_range": round(1.96 * se, 2), "lean_is_clear": bool(clear),
             "correlation": round(float(np.corrcoef(size, gap)[0, 1]), 2)}
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# Starting out: a profile with few or no ratings of its own (someone without Letterboxd)
+# ---------------------------------------------------------------------------------------------------------------
+STARTER_MIN = 25          # with fewer ratings than this, the full model has too little to learn from
+STARTER_MU = 3.3          # what a typical Letterboxd film averages: the starting guess for anyone
+LIKE_LIFT, AVOID_DROP = 0.25, 0.5
+
+
+class StarterModel(TasteModel):
+    """Follows the crowd until there's enough to learn from.
+
+    The guess is the film's Letterboxd average (held back towards typical when few people have rated it), moved a
+    little by the genres the taste quiz said were liked or best skipped, and by anything the person has already
+    rated (quiz answers, films rated after a trip), measured against what the crowd thought of those films.
+    Critics and buzz are added in the planner, where they're known. Swaps itself out for the full model once there
+    are 25 ratings."""
+    starter = True
+
+    def __init__(self, likes: list[str] | None = None, avoids: list[str] | None = None):
+        super().__init__()
+        self.likes = set(likes or [])
+        self.avoids = set(avoids or [])
+
+    def fit(self, rows: list[tuple]) -> "StarterModel":
+        rows = [r for r in rows if r[0] and r[1] is not None]
+        self.n = len(rows)
+        self.mu = self.c_mean = STARTER_MU
+        self.ca, self.cb = 0.0, 1.0
+        self.no_comm = None
+        self.w = {**{c: 0.0 for c in COLS}, "community": 1.0, **{t: 0.6 for t, _, _ in TYPES}}
+        for t in NOT_REASONS:
+            self.w[t] = 0.0
+        stats = {t: defaultdict(lambda: [0.0, 0]) for t in SHRINK}
+        rstats = {t: defaultdict(lambda: [0.0, 0]) for t in SHRINK}
+        for r in rows:
+            e = r[1] - (self.mu + self._cterm(r[2], _n(r)))
+            for t, names in features(r[0]).items():
+                for nm in set(names):
+                    stats[t][nm][0] += r[1] - self.mu
+                    stats[t][nm][1] += 1
+                    rstats[t][nm][0] += e
+                    rstats[t][nm][1] += 1
+        self.stats = {t: dict(v) for t, v in stats.items()}
+        self.rstats = {t: dict(v) for t, v in rstats.items()}
+        return self
+
+    def lean(self, meta: dict | None) -> tuple[float, str | None]:
+        genres = set((meta or {}).get("genres") or [])
+        skip = sorted(genres & self.avoids)
+        like = sorted(genres & self.likes)
+        if skip:
+            return -AVOID_DROP, f"Against: you'd rather skip {' and '.join(skip).lower()}"
+        if like:
+            return LIKE_LIFT, f"For: you like {' and '.join(like).lower()}"
+        return 0.0, None
+
+    def raw(self, meta, community, n=None, fallback=True):
+        rating, _ = super().raw(meta, community, n, fallback=False)
+        return float(min(5.0, max(0.5, rating + self.lean(meta)[0]))), None
+
+    def predict(self, meta, community, community_label="Letterboxd average", n=None):
+        p = super().predict(meta, community, community_label, n)
+        _, why = self.lean(meta)
+        if why:
+            p.reasons.insert(1 if community is not None else 0, why)
+        if community is None:
+            p.reasons.insert(0, "No Letterboxd average yet, so this is a guess")
+        p.confidence = "none" if not meta else "medium" if community is not None and credibility(n) >= 0.8 else "low"
+        return p
+
+    def summary(self) -> dict:
+        out = super().summary()
+        out["starter"] = True
+        return out

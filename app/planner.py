@@ -24,7 +24,7 @@ from . import stars as halfstars
 from .config import Settings
 from .db import DB
 from .reviews import verdict as review_verdict
-from .taste import VARIANTS, TasteModel, community_value, size_effect, stars
+from .taste import STARTER_MIN, VARIANTS, StarterModel, TasteModel, community_value, size_effect, stars
 
 MAJOR = ("disney", "warner", "universal", "sony", "paramount", "20th century")
 MID = ("studiocanal", "lionsgate", "entertainment film", "altitude", "signature", "sky", "black bear",
@@ -34,6 +34,8 @@ MAX_MONTHS = 12    # beyond those, plan as far as Vue lists films (your Want to 
 SHOW_MONTHS = 6    # months on the Plan page: up to the last worth planning (a Want to see film, or BUSY_MONTH openings)
 BUSY_MONTH = 3
 PLAN_VERSION = 13  # bump when the plan's shape changes, so a saved plan from an older version is rebuilt
+STARTER_CRITICS = {"good": 0.15, "poor": -0.2}  # for a profile still starting out (see taste.StarterModel)
+STARTER_BUZZ = 0.3
 CONF_SHRINK = {"high": 1.0, "medium": 0.9, "low": 0.75, "none": 0.5}
 
 
@@ -341,10 +343,15 @@ def buzz_for(key, lists: dict, pops: dict, opening: dict, raw: dict) -> dict:
 
 
 def build_model(db: DB) -> TasteModel:
-    """Uses whichever variant won the last held-out model check."""
+    """Uses whichever variant won the last held-out model check, or the starter model (crowd, critics, buzz and the
+    taste quiz) for someone with fewer than 25 ratings."""
+    rows = training_rows(db)
+    if len(rows) < STARTER_MIN:
+        quiz = db.get("quiz") or {}
+        return StarterModel(quiz.get("likes"), quiz.get("avoids")).fit(rows)
     check = db.get("model_check") or {}
     cols, lam, scale = VARIANTS.get(check.get("best") or "Everything", VARIANTS["Everything"])
-    m = TasteModel(cols, lam, scale).fit(training_rows(db))
+    m = TasteModel(cols, lam, scale).fit(rows)
     m.check = check or None
     return m
 
@@ -517,6 +524,11 @@ def make_plan(db: DB, s: Settings, now: datetime | None = None, model: TasteMode
         recent = release is None or release >= today - timedelta(days=45)  # early reviews: new and upcoming films
         if v["label"] and f["kind"] == "film" and recent:
             item.reviews = {**v, "guardian_url": rv["guardian_url"] if rv else None}
+        if getattr(model, "starter", False) and yours is None and v["critics"] in STARTER_CRITICS:
+            # starting out, the critics are part of the guess (once there's taste to learn from, they're shown only)
+            item.priority += STARTER_CRITICS[v["critics"]]
+            item.reasons.insert(1, {"good": "For: critics liked it", "poor": "Against: critics didn't"}[v["critics"]]
+                                + (f" ({v['critics_short']})" if v.get("critics_short") else ""))
         item.model_rating = round(pred.rating, 2) if meta else None
         item.unconfirmed = f["kind"] == "film" and not fs
         item.times_overdue = item.unconfirmed and times_overdue(release, False, today)
@@ -550,6 +562,8 @@ def make_plan(db: DB, s: Settings, now: datetime | None = None, model: TasteMode
     openings = {k: v["opening_showings"] for k, v in buzz_in.items() if v["opening_showings"] is not None}
     for item, run, days in base:
         item.buzz = buzz_for(item.film_id, lists, pops, openings, buzz_in[item.film_id])
+        if getattr(model, "starter", False) and item.buzz and item.your_rating is None:
+            item.priority += STARTER_BUZZ * (item.buzz["score"] - 0.5)  # starting out, what people are talking about
         if item.kind == "film":
             opens = date.fromisoformat(item.release_date) if item.release_date else (days[0] if days else today)
             item.p_two_weeks = round(run.p_showing(max(opens, today) + timedelta(days=14)), 2)

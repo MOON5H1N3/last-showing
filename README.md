@@ -119,6 +119,14 @@ The token stays on your computer and is only sent to GitHub; it's excluded from 
 
 Coming from Vuearr? Your data carries over automatically. Because the container name changed, run `docker compose down` once before your first update.
 
+## More than one person (profiles)
+
+Settings → **Profiles** adds someone else who goes to the same cinema, like family. Each profile has its own tickets (their own Monzo Perks), Want to see, hidden films and plan; the cinema, the listings and Discord are shared, and Discord messages stay the main profile's. Switch with the name at the top of every page.
+
+A profile doesn't need Letterboxd. Until it has 25 ratings, its picks start from the crowd (the Letterboxd average, trusted less when few people have rated a film), early reviews and buzz, nudged by a two-part **taste quiz**: genres to like or skip, and well-known films to rate. Quiz answers and films rated from a film's page ("Seen it? How was it") count as ratings, and at 25 the full taste model takes over.
+
+**Films you'd both enjoy** ranks what's on by whichever of you would like it less, so the top of the list suits you both.
+
 ## Running it for someone else
 
 Nothing is hard-coded to one person or cinema. A friend runs their own copy with their own `.env` secrets, then picks their Vue, tickets and Letterboxd username on the Settings page.

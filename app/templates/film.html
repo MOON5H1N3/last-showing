@@ -34,6 +34,14 @@
         {% if f.your_rating is none and f.predicted|stars_alt %}<div class="small" style="color:var(--marquee-text)">A close call: could be {{ f.predicted|stars_alt }}.</div>{% endif %}
         <div class="muted small">{{ m.confidence(f.confidence) }}.{% if m.fav(f)|trim %} {{ m.fav(f) }}.{% endif %}</div></div>
     </div>
+    {% if not s.letterboxd_user and f.kind == 'film' and (not f.release_date or f.release_date <= today.isoformat()) %}
+    <form class="ratebox" method="post" action="/rate" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <input type="hidden" name="film_id" value="{{ f.film_id }}"><input type="hidden" name="next" value="{{ path }}">
+      <label for="rate-sel" class="small" style="font-weight:600">{{ 'Your rating' if f.your_rating is not none else 'Seen it? How was it' }}</label>
+      <select id="rate-sel" name="rating" class="field" style="width:auto;height:40px">{% if f.your_rating is none %}<option value="">Pick</option>{% endif %}{% for v in range(10, 0, -1) %}{% set r = v / 2 %}<option value="{{ r }}" {% if f.your_rating == r %}selected{% endif %}>{{ r|stars }}</option>{% endfor %}{% if f.your_rating is not none %}<option value="0">Clear my rating</option>{% endif %}</select>
+      <button class="btn small">Save</button>
+    </form>
+    {% endif %}
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
       {% if plan.tickets_total %}{{ m.booked_btn(f) }}{% endif %}
       {% set fm = (pin_months|selectattr(0, 'equalto', from_month)|first) if from_month else none %}

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% import '_macros.html' as m with context %}
+{% block title %}Films you'd both enjoy | {{ app_name }}{% endblock %}
+{% block style %}
+.both .r2{font:600 13px var(--mono);color:var(--ink-muted);white-space:nowrap;text-align:right}
+.both .r2 b{color:var(--ink);font-weight:600}
+{% endblock %}
+{% block content %}
+<section style="padding-top:var(--space-8)">
+  <h1 class="display" style="margin:0;font-size:clamp(40px,7vw,72px)">Films you'd both enjoy</h1>
+  <p class="muted" style="margin:12px 0 0">At Vue {{ cinema_name }}, ranked by whoever would like it less, so the top ones suit {{ my_name }} and {{ other_name }}. Films either of you has already rated are left out.</p>
+  {% if others|length > 1 %}<nav class="pills" aria-label="With" style="margin-top:var(--space-6)">{% for o in others %}<a class="pill" href="/together?with={{ o.id }}" {% if o.id == other %}aria-current="page"{% endif %}>With {{ o.name }}</a>{% endfor %}</nav>{% endif %}
+</section>
+<section class="section both" style="padding-top:var(--space-6)">
+  {% if both %}
+  <div class="list">
+    {% for i in both %}
+    {% set when = (i.sessions[0].start|dt('%-d %b')) if i.sessions else ((i.release_date|dt('%-d %b')) if i.release_date and i.release_date > today.isoformat() else 'TBC') %}
+    <div class="lrow">
+      <span class="when">{{ when }}</span>
+      <a class="thumb" href="/film/{{ i.film_id }}" tabindex="-1" aria-hidden="true" {% if i.poster %}style="background-image:url('{{ i.poster }}')"{% endif %}></a>
+      <div><div class="t"><a href="/film/{{ i.film_id }}">{{ i.title }}</a>{{ m.tags(i) }}</div><div class="m">{{ m.info(i) }}</div></div>
+      <span class="r2">{{ my_name }} <b>{{ (i.predicted or 0)|stars }}</b><br>{{ other_name }} <b>{{ (i.theirs or 0)|stars }}</b></span>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty">Nothing showing that you'd both rate above your usual. It changes as new films are listed.</div>
+  {% endif %}
+</section>
+{% endblock %}

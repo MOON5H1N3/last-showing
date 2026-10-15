@@ -44,6 +44,23 @@ class Engine:
             return None
         for old in sorted(folder.glob("lastshowing-*.sqlite3"))[:-keep]:
             old.unlink(missing_ok=True)
+        # other people's profiles (Settings -> Profiles), each beside it
+        import sqlite3
+        for f in sorted((self.s.data_dir / "profiles").glob("*.sqlite3")):
+            if "-removed-" in f.stem:
+                continue
+            pdest = folder / f"profile-{f.stem}-{datetime.now(self.s.tz):%Y%m%d}.sqlite3"
+            try:
+                src, out = sqlite3.connect(str(f)), sqlite3.connect(str(pdest))
+                try:
+                    src.backup(out)
+                finally:
+                    src.close()
+                    out.close()
+            except Exception as e:
+                log.warning("profile backup failed for %s: %s", f.stem, e)
+            for old in sorted(folder.glob(f"profile-{f.stem}-*.sqlite3"))[:-keep]:
+                old.unlink(missing_ok=True)
         return dest
 
     @property
@@ -305,6 +322,11 @@ class Engine:
             # 8. plan
             async def do_plan():
                 p = self.replan()
+                others = getattr(self, "profiles", None)
+                if others is not None and len(others.all()) > 1:
+                    others.replan_all()
+                    return (f"{len(p['picks'])} picks, {len(p['leaving_soon'])} leaving soon; "
+                            f"{len(others.all()) - 1} other profile{'s' if len(others.all()) > 2 else ''} re-planned")
                 return f"{len(p['picks'])} picks, {len(p['leaving_soon'])} leaving soon"
             await step("Plan", do_plan)
         finally:

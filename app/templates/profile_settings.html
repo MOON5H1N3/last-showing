@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}{{ profile_name }}'s settings | {{ app_name }}{% endblock %}
+{% block style %}
+{% include '_settings_style.html' %}
+.setgrid{grid-template-columns:minmax(0,1fr);max-width:760px}
+.meter{height:8px;border-radius:var(--radius-pill);background:var(--surface-sunk);overflow:hidden}
+.meter span{display:block;height:100%;background:var(--marquee)}
+{% endblock %}
+{% block content %}
+<div class="setgrid">
+<div style="display:flex;flex-direction:column;gap:28px">
+<div>
+  <h1 class="display" style="margin:0;font-size:clamp(40px,7vw,72px)">{{ profile_name }}</h1>
+  <p class="muted" style="margin:8px 0 0">{{ profile_name }}'s own tickets, Want to see and plan. The cinema, refresh times and Discord are shared with the main profile ({{ profiles[0].name }}).</p>
+</div>
+
+<section id="taste" class="scard">
+  <div><div class="rule"></div><h2>Taste</h2></div>
+  {% set pct = [100, (progress.ratings * 100 // progress.needed)]|min %}
+  {% if progress.ratings < progress.needed %}
+  <p style="margin:0">Picks for {{ profile_name }} start from what the crowd thinks (Letterboxd averages), early reviews and how much buzz a film has, nudged by the quiz. After {{ progress.needed }} ratings, they're learned from {{ profile_name }}'s own taste instead.</p>
+  {% else %}
+  <p style="margin:0">{{ profile_name }} has {{ progress.ratings }} ratings, so picks are learned from {{ profile_name }}'s own taste, just as on the main profile.</p>
+  {% endif %}
+  <div><div class="meter" role="img" aria-label="{{ progress.ratings }} of {{ progress.needed }} ratings"><span style="width:{{ pct }}%"></span></div>
+    <div class="help" style="margin-top:6px">{{ progress.ratings }} rating{{ 's' if progress.ratings != 1 }} so far ({{ progress.quiz }} from the quiz). Rate a film from its page after seeing it.</div></div>
+  <div style="display:flex;gap:12px;flex-wrap:wrap">
+    <a class="btn main" href="/quiz">{{ 'Take the taste quiz' if not (quiz_state.likes or quiz_state.avoids or progress.quiz) else 'Carry on with the quiz' }}</a>
+    <a class="btn" href="/together">Films you'd both enjoy</a>
+  </div>
+</section>
+
+<form id="settings" method="post" action="/settings" style="display:flex;flex-direction:column;gap:28px">
+<input type="hidden" name="next" value="/settings">
+<section id="who" class="scard">
+  <div><h2>Name</h2></div>
+  <div class="srow">
+    <div><label class="lab" for="pname">Shown in the switcher at the top</label></div>
+    <input id="pname" name="profile_name" class="field" maxlength="30" value="{{ profile_name }}">
+  </div>
+</section>
+
+<section id="tickets" class="scard">
+  <div><h2>Tickets</h2></div>
+  <div class="srow">
+    <div><div class="lab" id="src-l">Where {{ profile_name }}'s tickets come from</div><div class="help">Their own Monzo Perks, separate from the main profile's.</div></div>
+    <div class="seg" role="radiogroup" aria-labelledby="src-l">
+      {% for v, label in [('monzo', 'Monzo Perks'), ('custom', 'Custom'), ('none', 'No tickets')] %}
+      <input type="radio" id="src-{{ v }}" name="ticket_source" value="{{ v }}" {% if s.ticket_source == v %}checked{% endif %}><label for="src-{{ v }}">{{ label }}</label>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="srow">
+    <div><label class="lab" for="tpm">Tickets per month</label></div>
+    <input id="tpm" name="tickets_per_month" type="number" inputmode="numeric" min="0" max="10" value="{{ s.tickets_per_month }}" class="field" style="width:88px;text-align:center;font-family:var(--display);font-weight:800;font-size:24px">
+  </div>
+</section>
+
+<section id="appearance" class="scard">
+  <div><h2>Appearance</h2></div>
+  <div class="seg" role="radiogroup" aria-label="Theme">
+    {% for val, label in [('system', 'Follow my device'), ('dark', 'Auditorium'), ('light', 'Matinee')] %}
+    <input type="radio" id="theme-{{ val }}" name="theme" value="{{ val }}" {% if s.theme == val %}checked{% endif %}><label for="theme-{{ val }}">{{ label }}</label>
+    {% endfor %}
+  </div>
+</section>
+
+<div class="savebar"><button class="btn main" type="submit">Save changes</button></div>
+</form>
+
+<section id="remove" class="scard">
+  <div><h2>Remove this profile</h2></div>
+  <p class="help" style="margin:0">Takes {{ profile_name }} off the switcher. The file is kept in the data folder, renamed, in case it was a mistake.</p>
+  <form method="post" action="/profile/remove"><input type="hidden" name="profile" value="{{ profile_id }}"><input type="hidden" name="next" value="/settings">
+    <details><summary class="btn ghost" style="display:inline-flex">Remove {{ profile_name }}…</summary>
+      <p style="margin:12px 0">Sure? {{ profile_name }}'s tickets, Want to see and ratings leave the app.</p><button class="btn">Yes, remove {{ profile_name }}</button></details>
+  </form>
+</section>
+</div>
+</div>
+{% endblock %}
